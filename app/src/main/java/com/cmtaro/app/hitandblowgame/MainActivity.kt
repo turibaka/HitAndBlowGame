@@ -1,47 +1,33 @@
 package com.cmtaro.app.hitandblowgame
 
+import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.cmtaro.app.hitandblowgame.ui.theme.HitAndBlowGameTheme
+import androidx.appcompat.app.AppCompatActivity
+import com.cmtaro.app.hitandblowgame.databinding.ActivityMenuBinding // 名前が自動で変わります
+import com.cmtaro.app.hitandblowgame.ui.game.GameActivity
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
+    private lateinit var binding: ActivityMenuBinding
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            HitAndBlowGameTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
-            }
+        binding = ActivityMenuBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        // 3桁ボタン
+        binding.buttonStart3Digit.setOnClickListener {
+            startGame(3)
+        }
+
+        // 4桁ボタン
+        binding.buttonStart4Digit.setOnClickListener {
+            startGame(4)
         }
     }
-}
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    HitAndBlowGameTheme {
-        Greeting("Android")
+    private fun startGame(digit: Int) {
+        val intent = Intent(this, GameActivity::class.java)
+        intent.putExtra("DIGIT_COUNT", digit) // 桁数を渡す
+        startActivity(intent)
     }
 }
