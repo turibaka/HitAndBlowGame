@@ -28,7 +28,9 @@ class GameActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // 初期設定
-        val isCardMode = intent.getBooleanExtra("CARD_MODE", false)
+        val digitCount = intent.getIntExtra("DIGIT_COUNT", 3)
+        val isCardMode = intent.getBooleanExtra("IS_CARD_MODE", false)
+
         viewModel.setCardMode(isCardMode)
         viewModel.setDigitCount(digitCount)
 
@@ -102,11 +104,10 @@ class GameActivity : AppCompatActivity() {
         lifecycleScope.launch {
             viewModel.phase.collect { phase ->
                 updateInputDisplay()
-                when (phase) {
-                    GamePhase.SETTING_P1 -> binding.textInstruction.text = "P1: 秘密の番号をセット"
-                    GamePhase.SETTING_P2 -> binding.textInstruction.text = "P2: 秘密の番号をセット"
-                    GamePhase.PLAYING -> binding.textInstruction.text = "バトル中！相手の番号を当てろ"
-                    GamePhase.FINISHED -> binding.textInstruction.text = "GAME OVER"
+                binding.textInstruction.text = when (phase) {
+                    GamePhase.SETTING_P1 -> "P1: セット"
+                    GamePhase.SETTING_P2 -> "P2: セット"
+                    else -> "バトル開始"
                 }
             }
         }
@@ -128,16 +129,14 @@ class GameActivity : AppCompatActivity() {
         lifecycleScope.launch {
             viewModel.availableCards.collect { cards ->
                 if (cards.isNotEmpty()) {
-                    binding.layoutCardSelection.visibility = View.VISIBLE
-                    binding.btnCard1.text = "${cards[0].title}\n${cards[0].description}"
-                    binding.btnCard2.text = "${cards[1].title}\n${cards[1].description}"
-                    binding.btnCard3.text = "${cards[2].title}\n${cards[2].description}"
-
-                    binding.btnCard1.setOnClickListener { viewModel.onCardSelected(viewModel.currentPlayer.value, cards[0]) }
-                    binding.btnCard2.setOnClickListener { viewModel.onCardSelected(viewModel.currentPlayer.value, cards[1]) }
-                    binding.btnCard3.setOnClickListener { viewModel.onCardSelected(viewModel.currentPlayer.value, cards[2]) }
-                } else {
-                    binding.layoutCardSelection.visibility = View.GONE
+                    val options = cards.map { it.title }.toTypedArray()
+                    androidx.appcompat.app.AlertDialog.Builder(this@GameActivity)
+                        .setTitle("ボーナス")
+                        .setItems(options) { _, which ->
+                            viewModel.onCardSelected(viewModel.currentPlayer.value, cards[which])
+                        }
+                        .setCancelable(false)
+                        .show()
                 }
             }
         }
