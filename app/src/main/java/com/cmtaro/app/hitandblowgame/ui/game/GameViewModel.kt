@@ -67,7 +67,8 @@ enum class EffectType {
     DEFENSE,     // 防御演出（playerの領域に）
     HEAL,        // 回復演出（playerの領域に）
     BARRIER,     // バリア演出（無敵時）
-    COUNTER      // カウンター演出
+    COUNTER,     // カウンター演出
+    STEAL_HP     // HP吸収演出
 }
 
 class GameViewModel : ViewModel() {
@@ -352,6 +353,27 @@ class GameViewModel : ViewModel() {
             CardType.COUNTER -> {
                 _replayEffect.value = ReplayEffect(EffectType.COUNTER, player, null, 0)
                 delay(800)
+            }
+            CardType.STEAL_HP -> {
+                val targetPlayer = if (player == Player.P1) Player.P2 else Player.P1
+                val stealAmount = if (player == Player.P1) {
+                    10.coerceAtMost(p2Hp.value)
+                } else {
+                    10.coerceAtMost(p1Hp.value)
+                }
+                
+                // HP吸収のエフェクトを表示
+                _replayEffect.value = ReplayEffect(EffectType.STEAL_HP, player, targetPlayer, stealAmount)
+                delay(800)
+                
+                // リプレイ中にHPを変更
+                if (player == Player.P1) {
+                    _p2Hp.value = (p2Hp.value - stealAmount).coerceIn(0, 100)
+                    _p1Hp.value = (p1Hp.value + stealAmount).coerceIn(0, 100)
+                } else {
+                    _p1Hp.value = (p1Hp.value - stealAmount).coerceIn(0, 100)
+                    _p2Hp.value = (p2Hp.value + stealAmount).coerceIn(0, 100)
+                }
             }
             else -> {
                 // 攻撃バフなどは視覚的なエフェクトなし
@@ -835,19 +857,8 @@ class GameViewModel : ViewModel() {
                 addBattleLog("🃏 $playerName カード使用: ${card.title} → Blow×3")
             }
             CardType.STEAL_HP -> {
-                if (player == Player.P1) {
-                    val steal = 10.coerceAtMost(p2Hp.value)
-                    _p2Hp.value = (p2Hp.value - steal).coerceIn(0, 100)
-                    _p1Hp.value = (p1Hp.value + steal).coerceIn(0, 100)
-                    _lastDamageInfo.value = "P1がP2のHPを${steal}奪った！"
-                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP${steal}吸収")
-                } else {
-                    val steal = 10.coerceAtMost(p1Hp.value)
-                    _p1Hp.value = (p1Hp.value - steal).coerceIn(0, 100)
-                    _p2Hp.value = (p2Hp.value + steal).coerceIn(0, 100)
-                    _lastDamageInfo.value = "P2がP1のHPを${steal}奪った！"
-                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP${steal}吸収")
-                }
+                // HP変更はリプレイ時にshowCardEffect内で実行されるため、ここでは何もしない
+                addBattleLog("🃏 $playerName カード使用: ${card.title}")
             }
             else -> {}
         }

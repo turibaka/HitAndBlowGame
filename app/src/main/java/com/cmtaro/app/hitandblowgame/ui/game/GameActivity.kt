@@ -239,6 +239,9 @@ class GameActivity : AppCompatActivity() {
                         EffectType.COUNTER -> {
                             showCounterEffect(effect.player)
                         }
+                        EffectType.STEAL_HP -> {
+                            showStealHpEffect(effect.player, effect.targetPlayer!!, effect.value)
+                        }
                         EffectType.NONE -> { /* 何もしない */ }
                     }
                 }
@@ -807,6 +810,53 @@ class GameActivity : AppCompatActivity() {
             
             counterAnim.start()
             counterAnim.doOnEnd {
+                binding.viewAttackEffect.visibility = View.GONE
+            }
+        }
+    }
+    
+    /**
+     * HP吸収エフェクトを表示
+     * @param player HP吸収するプレイヤー
+     * @param targetPlayer HP吸収されるプレイヤー
+     * @param amount 吸収量
+     */
+    fun showStealHpEffect(player: Player, targetPlayer: Player, amount: Int) {
+        lifecycleScope.launch {
+            val fromView = if (targetPlayer == Player.P1) binding.layoutP1Status else binding.layoutP2Status
+            val toView = if (player == Player.P1) binding.layoutP1Status else binding.layoutP2Status
+            
+            // 紫の吸収エフェクト
+            binding.viewAttackEffect.visibility = View.VISIBLE
+            binding.viewAttackEffect.setBackgroundColor(Color.parseColor("#9C27B0"))
+            
+            val fromLocation = IntArray(2)
+            val toLocation = IntArray(2)
+            fromView.getLocationOnScreen(fromLocation)
+            toView.getLocationOnScreen(toLocation)
+            
+            // 対象から自分へ移動
+            binding.viewAttackEffect.x = fromLocation[0].toFloat()
+            binding.viewAttackEffect.y = fromLocation[1].toFloat()
+            binding.viewAttackEffect.alpha = 0.8f
+            binding.viewAttackEffect.scaleX = 2f
+            binding.viewAttackEffect.scaleY = 2f
+            
+            val moveX = ObjectAnimator.ofFloat(binding.viewAttackEffect, "x", fromLocation[0].toFloat(), toLocation[0].toFloat())
+            val moveY = ObjectAnimator.ofFloat(binding.viewAttackEffect, "y", fromLocation[1].toFloat(), toLocation[1].toFloat())
+            val fadeOut = ObjectAnimator.ofFloat(binding.viewAttackEffect, "alpha", 0.8f, 0f)
+            
+            val stealAnim = AnimatorSet().apply {
+                playTogether(moveX, moveY, fadeOut)
+                duration = 600
+            }
+            
+            stealAnim.start()
+            stealAnim.doOnEnd {
+                // 吸収元にマイナス表示
+                showFloatingDamage(fromView, amount, false)
+                // 吸収先にプラス表示
+                showFloatingDamage(toView, amount, true)
                 binding.viewAttackEffect.visibility = View.GONE
             }
         }
