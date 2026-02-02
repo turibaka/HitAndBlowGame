@@ -107,7 +107,36 @@ class GameActivity : AppCompatActivity() {
                 binding.textInstruction.text = when (phase) {
                     GamePhase.SETTING_P1 -> "P1: セット"
                     GamePhase.SETTING_P2 -> "P2: セット"
-                    else -> "バトル開始"
+                    GamePhase.PLAYING -> "バトル中"
+                    GamePhase.FINISHED -> "試合終了"
+                }
+            }
+        }
+
+        // --- ラウンドとターンの表示 ---
+        lifecycleScope.launch {
+            viewModel.currentRound.collect { round ->
+                binding.textRoundInfo.text = "ラウンド: $round"
+            }
+        }
+        
+        lifecycleScope.launch {
+            viewModel.currentTurn.collect { turn ->
+                binding.textTurnInfo.text = "ターン: $turn"
+            }
+        }
+        
+        lifecycleScope.launch {
+            viewModel.totalTurns.collect { total ->
+                binding.textTotalTurns.text = "総ターン数: $total"
+            }
+        }
+        
+        // --- ダメージ情報の表示 ---
+        lifecycleScope.launch {
+            viewModel.lastDamageInfo.collect { damageInfo ->
+                if (damageInfo.isNotEmpty()) {
+                    binding.textDamageInfo.text = damageInfo
                 }
             }
         }

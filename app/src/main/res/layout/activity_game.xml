@@ -28,6 +28,63 @@
             android:layout_marginTop="4dp"
             android:text="現在：P1" />
 
+        <!-- 進行状況表示エリア -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="8dp"
+            android:background="#E3F2FD"
+            android:layout_marginTop="4dp"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/textRoundInfo"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textAlignment="center"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#1976D2"
+                android:text="ラウンド: 1" />
+
+            <TextView
+                android:id="@+id/textTurnInfo"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textAlignment="center"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#388E3C"
+                android:text="ターン: 1" />
+
+            <TextView
+                android:id="@+id/textTotalTurns"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textAlignment="center"
+                android:textSize="14sp"
+                android:textColor="#757575"
+                android:text="総ターン数: 0" />
+        </LinearLayout>
+
+        <!-- ダメージ情報表示 -->
+        <TextView
+            android:id="@+id/textDamageInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAlignment="center"
+            android:textSize="12sp"
+            android:textColor="#D32F2F"
+            android:textStyle="bold"
+            android:padding="4dp"
+            android:background="#FFEBEE"
+            android:layout_marginTop="4dp"
+            android:text="" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

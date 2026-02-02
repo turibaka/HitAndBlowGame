@@ -50,6 +50,12 @@ class GameViewModel : ViewModel() {
     private val _currentRound = MutableStateFlow(1)
     val currentRound = _currentRound.asStateFlow()
 
+    private val _currentTurn = MutableStateFlow(1)
+    val currentTurn = _currentTurn.asStateFlow()
+
+    private val _totalTurns = MutableStateFlow(0)
+    val totalTurns = _totalTurns.asStateFlow()
+
     private val _availableCards = MutableStateFlow<List<CardType>>(emptyList())
     val availableCards = _availableCards.asStateFlow()
 
@@ -63,6 +69,9 @@ class GameViewModel : ViewModel() {
     private var p2AttackMultiplier = 1
     private var p1IsInvincible = false
     private var p2IsInvincible = false
+    
+    private val _lastDamageInfo = MutableStateFlow("")
+    val lastDamageInfo = _lastDamageInfo.asStateFlow()
 
     fun setDigitCount(count: Int) { digitCount = count }
 
@@ -99,6 +108,9 @@ class GameViewModel : ViewModel() {
         val newGuess = Guess(current.name, input, result.hit, result.blow)
         if (current == Player.P1) _p1Logs.value += newGuess else _p2Logs.value += newGuess
 
+        // ターン数をカウント
+        _totalTurns.value += 1
+
         if (isCardMode) {
             // 1. ダメージ計算
             calculateCardModeDamage(input, result.hit, result.blow, current)
@@ -106,6 +118,11 @@ class GameViewModel : ViewModel() {
             // 2. 3ヒット（正解）した場合の処理
             if (result.hit == digitCount) {
                 if (_winner.value == null) {
+                    // ラウンド進行
+                    _currentRound.value += 1
+                    _currentTurn.value = 1 // ターンリセット
+                    turnCounter = 0 // 内部カウンターもリセット
+                    
                     // ここでバフカードを配る（ボーナスタイム）
                     prepareNextRoundCards()
 
@@ -114,9 +131,9 @@ class GameViewModel : ViewModel() {
                     // 例：P1が当てたなら、次はP2が新しい数字を決める
                     _phase.value = if (current == Player.P1) GamePhase.SETTING_P2 else GamePhase.SETTING_P1
 
-                    // ログも一旦クリアして、新しいラウンドをスッキリさせる（お好みで）
-                    // _p1Logs.value = emptyList()
-                    // _p2Logs.value = emptyList()
+                    // ログも一旦クリアして、新しいラウンドをスッキリさせる
+                    _p1Logs.value = emptyList()
+                    _p2Logs.value = emptyList()
 
                     return // フェーズが変わるのでここで処理終了
                 }
@@ -126,6 +143,9 @@ class GameViewModel : ViewModel() {
             if (_winner.value != null) {
                 _phase.value = GamePhase.FINISHED
             } else {
+                // ターン進行チェック（6ターンごとにカード配布）
+                checkRoundProgress()
+                
                 // 交代
                 _currentPlayer.value = if (current == Player.P1) Player.P2 else Player.P1
             }
@@ -143,14 +163,22 @@ class GameViewModel : ViewModel() {
     // カードバトルの特殊ルール
     private fun calculateCardModeDamage(guess: String, hit: Int, blow: Int, current: Player) {
         val myAnswer = if (current == Player.P1) p1Answer else p2Answer
+        var damageLog = ""
 
         // 1. 【自傷ダメージ】
         if (hit == 0 && blow == 0) {
             val isInvincible = if (current == Player.P1) p1IsInvincible else p2IsInvincible
             if (!isInvincible) {
                 val selfDamage = myAnswer.map { it.digitToInt() }.sum()
-                if (current == Player.P1) _p1Hp.value = (p1Hp.value - selfDamage).coerceAtMost(100)
-                else _p2Hp.value = (p2Hp.value - selfDamage).coerceAtMost(100)
+                if (current == Player.P1) {
+                    _p1Hp.value = (p1Hp.value - selfDamage).coerceIn(0, 100)
+                    damageLog = "P1が自傷ダメージ -$selfDamage"
+                } else {
+                    _p2Hp.value = (p2Hp.value - selfDamage).coerceIn(0, 100)
+                    damageLog = "P2が自傷ダメージ -$selfDamage"
+                }
+            } else {
+                damageLog = "${current.name}は防御バフで自傷を無効化！"
             }
             // 効果を使ったらリセット
             if (current == Player.P1) p1IsInvincible = false else p2IsInvincible = false
@@ -161,12 +189,19 @@ class GameViewModel : ViewModel() {
             val multiplier = if (current == Player.P1) p1AttackMultiplier else p2AttackMultiplier
             val attackDamage = guess.map { it.digitToInt() }.sum() * multiplier
 
-            if (current == Player.P1) _p2Hp.value = (p2Hp.value - attackDamage).coerceAtMost(100)
-            else _p1Hp.value = (p1Hp.value - attackDamage).coerceAtMost(100)
+            if (current == Player.P1) {
+                _p2Hp.value = (p2Hp.value - attackDamage).coerceIn(0, 100)
+                damageLog = "P1がP2に攻撃ダメージ -$attackDamage" + if (multiplier > 1) " (×$multiplier)" else ""
+            } else {
+                _p1Hp.value = (p1Hp.value - attackDamage).coerceIn(0, 100)
+                damageLog = "P2がP1に攻撃ダメージ -$attackDamage" + if (multiplier > 1) " (×$multiplier)" else ""
+            }
 
             // 効果を使ったらリセット
             if (current == Player.P1) p1AttackMultiplier = 1 else p2AttackMultiplier = 1
         }
+
+        _lastDamageInfo.value = damageLog
 
         // 死亡チェック
         if (_p1Hp.value <= 0) _winner.value = Player.P2
@@ -174,10 +209,12 @@ class GameViewModel : ViewModel() {
     }
     // processGuess の最後の方、ターン交代の直前に追加
     private fun checkRoundProgress() {
-        turnCount++
-        if (turnCount >= 6) { // 両者3回ずつ（計6回）で1ラウンド終了
-            turnCount = 0
-            _currentRound.value += 1
+        turnCounter++
+        _currentTurn.value = (turnCounter / 2) + 1 // 両者で1ターン
+        
+        if (turnCounter >= 6) { // 両者3回ずつ（計6回）で1ラウンド終了
+            turnCounter = 0
+            _currentTurn.value = 1
             prepareNextRoundCards()
         }
     }
@@ -199,22 +236,12 @@ class GameViewModel : ViewModel() {
                 if (player == Player.P1) p1IsInvincible = true else p2IsInvincible = true
             }
             CardType.HEAL -> {
-                if (player == Player.P1) _p1Hp.value = (p1Hp.value + 20).coerceAtMost(100)
-                else _p2Hp.value = (p2Hp.value + 20).coerceAtMost(100)
+                if (player == Player.P1) _p1Hp.value = (p1Hp.value + 20).coerceIn(0, 100)
+                else _p2Hp.value = (p2Hp.value + 20).coerceIn(0, 100)
             }
         }
         // カードを配り終えたらリストを空にしてUIを閉じる
         _availableCards.value = emptyList()
-    }
-
-    private fun updateRound() {
-        turnCounter++
-        // P1とP2が1回ずつ投げたら「1ターン消化」と数える場合
-        // 各プレイヤー3回ずつ（合計6回）でカード配布
-        if (turnCounter >= 6) {
-            turnCounter = 0 // リセット
-            prepareNextRoundCards()
-        }
     }
 
 }
