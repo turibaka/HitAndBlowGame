@@ -49,6 +49,24 @@ enum class CardCategory {
     SUPPORT  // 補助系（ゲーム中に使用可能）
 }
 
+// リプレイ演出用のエフェクトデータ
+data class ReplayEffect(
+    val type: EffectType,
+    val player: Player,
+    val targetPlayer: Player? = null,
+    val value: Int = 0,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+enum class EffectType {
+    NONE,
+    ATTACK,      // 攻撃演出（playerからtargetPlayerへ）
+    DEFENSE,     // 防御演出（playerの領域に）
+    HEAL,        // 回復演出（playerの領域に）
+    BARRIER,     // バリア演出（無敵時）
+    COUNTER      // カウンター演出
+}
+
 class GameViewModel : ViewModel() {
     private val calculator = HitBlowCalculator()
     private var digitCount = 3
@@ -150,9 +168,9 @@ class GameViewModel : ViewModel() {
     private val _battleLog = MutableStateFlow<List<String>>(emptyList())
     val battleLog = _battleLog.asStateFlow()
 
-    // リプレイシステム用
-    private val _replayCaption = MutableStateFlow("")
-    val replayCaption = _replayCaption.asStateFlow()
+    // リプレイシステム用 - エフェクト通知
+    private val _replayEffect = MutableStateFlow(ReplayEffect(EffectType.NONE, Player.P1))
+    val replayEffect = _replayEffect.asStateFlow()
 
     private val _showCardSelectDialog = MutableStateFlow(false)
     val showCardSelectDialog = _showCardSelectDialog.asStateFlow()
@@ -243,74 +261,50 @@ class GameViewModel : ViewModel() {
             val p1Result = calculator.judge(p2Answer, p1CurrentInput)
             val p2Result = calculator.judge(p1Answer, p2CurrentInput)
 
-            // ステップ1: P1のカード使用表示
-            if (p1UsedCard != null) {
-                _replayCaption.value = "🃏 P1 がカードを使用: 【${p1UsedCard!!.title}】"
-                delay(1200)
-            }
-
-            // ステップ2: P1の推測表示
-            _replayCaption.value = "🎯 P1 の推測: $p1CurrentInput"
             addBattleLog("🎯 P1 → $p1CurrentInput")
-            delay(1200)
-
-            // ステップ3: P1の結果表示
-            _replayCaption.value = buildString {
-                if (p1UsedCard != null) {
-                    appendLine("� P1: ${p1UsedCard!!.title}")
-                    appendLine()
-                }
-                appendLine("�🎯 P1 の推測: $p1CurrentInput")
-                appendLine("結果: ${p1Result.hit} Hit / ${p1Result.blow} Blow")
-            }
             addBattleLog("   ${p1Result.hit}H / ${p1Result.blow}B")
-            delay(1500)
-
-            // ステップ4: P2のカード使用表示
-            if (p2UsedCard != null) {
-                _replayCaption.value = "🃏 P2 がカードを使用: 【${p2UsedCard!!.title}】"
-                delay(1200)
-            }
-
-            // ステップ5: P2の推測表示
-            _replayCaption.value = "🎯 P2 の推測: $p2CurrentInput"
+            delay(300)
+            
             addBattleLog("🎯 P2 → $p2CurrentInput")
-            delay(1200)
-
-            // ステップ6: P2の結果表示
-            _replayCaption.value = "✨ 結果: ${p2Result.hit} Hit / ${p2Result.blow} Blow"
             addBattleLog("   ${p2Result.hit}H / ${p2Result.blow}B")
-            delay(1500)
+            delay(500)
 
-            // カードモードの場合、ダメージ計算を段階的に表示
+            // カードモードの場合、エフェクト付きでダメージ計算
             if (isCardMode) {
-                _replayCaption.value = "⚔️ ダメージ計算中..."
-                delay(800)
-
-                // P1のダメージ計算を表示
-                val p1DamageInfo = calculateDamagePreview(Player.P1, p1Result.hit, p1Result.blow)
-                _replayCaption.value = "⚔️ P1 → P2: $p1DamageInfo"
-                delay(1200)
-
-                // P1の行動を処理
+                // P1のカード使用演出
+                if (p1UsedCard != null) {
+                    showCardEffect(Player.P1, p1UsedCard!!)
+                }
+                delay(600)
+                
+                // P1の攻撃/ダメージ処理
+                val p1Damage = calculateActualDamage(Player.P1, p1Result.hit, p1Result.blow)
+                if (p1Damage > 0) {
+                    // 攻撃エフェクト
+                    _replayEffect.value = ReplayEffect(EffectType.ATTACK, Player.P1, Player.P2, p1Damage)
+                    delay(1500)
+                }
+                
                 processPlayerAction(Player.P1, p1CurrentInput)
-                delay(800)
+                delay(400)
 
-                // P2のダメージ計算を表示
-                val p2DamageInfo = calculateDamagePreview(Player.P2, p2Result.hit, p2Result.blow)
-                _replayCaption.value = "⚔️ P2 → P1: $p2DamageInfo"
-                delay(1200)
+                // P2のカード使用演出
+                if (p2UsedCard != null) {
+                    showCardEffect(Player.P2, p2UsedCard!!)
+                }
+                delay(600)
+                
+                // P2の攻撃/ダメージ処理
+                val p2Damage = calculateActualDamage(Player.P2, p2Result.hit, p2Result.blow)
+                if (p2Damage > 0) {
+                    // 攻撃エフェクト
+                    _replayEffect.value = ReplayEffect(EffectType.ATTACK, Player.P2, Player.P1, p2Damage)
+                    delay(1500)
+                }
 
                 // P2の行動を処理
                 processPlayerAction(Player.P2, p2CurrentInput)
-                delay(800)
-
-                // 状態異常の表示
-                val statusSummary = buildStatusSummary()
-                if (statusSummary.isNotEmpty()) {
-                    _replayCaption.value = "✨ 状態更新: $statusSummary"
-                    delay(1800)
-                }
+                delay(400)
             } else {
                 // 通常モードの処理
                 processPlayerAction(Player.P1, p1CurrentInput)
@@ -322,6 +316,52 @@ class GameViewModel : ViewModel() {
             // リプレイ完了
             finishReplay()
         }
+    }
+    
+    // カード使用時のエフェクト表示
+    private suspend fun showCardEffect(player: Player, card: CardType) {
+        when (card) {
+            CardType.DEFENSE_SMALL, CardType.DEFENSE_MEDIUM, CardType.DEFENSE_LARGE -> {
+                _replayEffect.value = ReplayEffect(EffectType.DEFENSE, player, null, 0)
+                delay(800)
+            }
+            CardType.HEAL_SMALL, CardType.HEAL_MEDIUM, CardType.HEAL_LARGE -> {
+                val healAmount = when (card) {
+                    CardType.HEAL_SMALL -> 10
+                    CardType.HEAL_MEDIUM -> 20
+                    CardType.HEAL_LARGE -> 30
+                    else -> 0
+                }
+                _replayEffect.value = ReplayEffect(EffectType.HEAL, player, null, healAmount)
+                delay(800)
+            }
+            CardType.INVINCIBLE -> {
+                _replayEffect.value = ReplayEffect(EffectType.BARRIER, player, null, 0)
+                delay(800)
+            }
+            CardType.COUNTER -> {
+                _replayEffect.value = ReplayEffect(EffectType.COUNTER, player, null, 0)
+                delay(800)
+            }
+            else -> {
+                // 攻撃バフなどは視覚的なエフェクトなし
+                delay(400)
+            }
+        }
+    }
+    
+    // 実際のダメージ量を計算（プレビューではなく確定値）
+    private fun calculateActualDamage(attacker: Player, hit: Int, blow: Int): Int {
+        val baseDamage = hit * 10 + blow * 3
+        if (baseDamage == 0) return 0
+        
+        val (attackBonus, attackMultiplier) = if (attacker == Player.P1) {
+            p1AttackBonus to p1AttackMultiplier
+        } else {
+            p2AttackBonus to p2AttackMultiplier
+        }
+        
+        return ((baseDamage + attackBonus) * attackMultiplier).toInt()
     }
 
     // 状態異常のサマリーを構築
@@ -434,8 +474,8 @@ class GameViewModel : ViewModel() {
             }
         }
         
-        // キャプションをクリア
-        _replayCaption.value = ""
+        // エフェクトをクリア
+        _replayEffect.value = ReplayEffect(EffectType.NONE, Player.P1)
     }
 
     // 1ターン限定の手札カード効果をクリア

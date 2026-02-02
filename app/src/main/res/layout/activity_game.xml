@@ -302,21 +302,6 @@
         android:shadowDy="2"
         android:shadowRadius="4" />
 
-    <!-- リプレイ字幕（画面下部） -->
-    <TextView
-        android:id="@+id/textReplayCaption"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:layout_marginBottom="80dp"
-        android:background="#CC000000"
-        android:padding="12dp"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:textAlignment="center"
-        android:visibility="gone"
-        android:elevation="5dp" />
-
     <LinearLayout
         android:id="@+id/layoutCardSelection"
         android:layout_width="match_parent"

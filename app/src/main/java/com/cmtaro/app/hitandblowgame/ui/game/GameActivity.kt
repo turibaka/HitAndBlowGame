@@ -216,20 +216,27 @@ class GameActivity : AppCompatActivity() {
                 }
             }
 
-            // リプレイ字幕の監視
+            // リプレイエフェクトの監視
             lifecycleScope.launch {
-                viewModel.replayCaption.collect { caption ->
-                    if (caption.isNotEmpty()) {
-                        binding.textReplayCaption.text = caption
-                        binding.textReplayCaption.visibility = View.VISIBLE
-                        animateFadeIn(binding.textReplayCaption, duration = 200)
-                        
-                        // 1.5秒後に自動的にフェードアウト
-                        binding.textReplayCaption.postDelayed({
-                            animateFadeOut(binding.textReplayCaption, onEnd = {
-                                binding.textReplayCaption.visibility = View.GONE
-                            }, duration = 300)
-                        }, 1500)
+                viewModel.replayEffect.collect { effect ->
+                    when (effect.type) {
+                        EffectType.ATTACK -> {
+                            showAttackEffect(effect.player, effect.targetPlayer!!, effect.value)
+                        }
+                        EffectType.DEFENSE -> {
+                            showDefenseEffect(effect.player)
+                        }
+                        EffectType.HEAL -> {
+                            showHealEffect(effect.player, effect.value)
+                        }
+                        EffectType.BARRIER -> {
+                            val targetView = if (effect.player == Player.P1) binding.layoutP1Status else binding.layoutP2Status
+                            showBarrierEffect(targetView)
+                        }
+                        EffectType.COUNTER -> {
+                            showCounterEffect(effect.player)
+                        }
+                        EffectType.NONE -> { /* 何もしない */ }
                     }
                 }
             }
@@ -641,47 +648,164 @@ class GameActivity : AppCompatActivity() {
     // === リプレイ演出専用のアニメーション ===
 
     /**
-     * 攻撃エフェクトを表示
+     * 攻撃エフェクトを表示（画面全体を使った演出）
      * @param fromPlayer 攻撃元のプレイヤー
+     * @param toPlayer 攻撃先のプレイヤー
      * @param damage ダメージ量
      */
-    fun showAttackEffect(fromPlayer: Player, damage: Int) {
+    fun showAttackEffect(fromPlayer: Player, toPlayer: Player, damage: Int) {
         lifecycleScope.launch {
-            // 攻撃元の位置を取得
+            // 攻撃元と攻撃先の位置を取得
             val fromView = if (fromPlayer == Player.P1) binding.layoutP1Status else binding.layoutP2Status
-            val toView = if (fromPlayer == Player.P1) binding.layoutP2Status else binding.layoutP1Status
+            val toView = if (toPlayer == Player.P1) binding.layoutP1Status else binding.layoutP2Status
             
-            // 攻撃エフェクトの初期位置を設定
             val fromLocation = IntArray(2)
             fromView.getLocationOnScreen(fromLocation)
             val toLocation = IntArray(2)
             toView.getLocationOnScreen(toLocation)
             
+            // エフェクトビューを大きく、目立つように設定
             binding.viewAttackEffect.visibility = View.VISIBLE
-            binding.viewAttackEffect.x = fromLocation[0].toFloat()
-            binding.viewAttackEffect.y = fromLocation[1].toFloat()
-            binding.viewAttackEffect.setBackgroundColor(Color.parseColor("#FF5722"))
+            binding.viewAttackEffect.x = fromLocation[0].toFloat() + fromView.width / 2 - 100
+            binding.viewAttackEffect.y = fromLocation[1].toFloat() + fromView.height / 2 - 100
+            binding.viewAttackEffect.setBackgroundColor(Color.parseColor("#FF3D00"))
             binding.viewAttackEffect.alpha = 1f
-            binding.viewAttackEffect.scaleX = 0.5f
-            binding.viewAttackEffect.scaleY = 0.5f
+            binding.viewAttackEffect.scaleX = 2f
+            binding.viewAttackEffect.scaleY = 2f
             
-            // 攻撃エフェクトを相手に向かって移動
+            // 大きく派手に相手に向かって移動
+            val targetX = toLocation[0].toFloat() + toView.width / 2 - 100
+            val targetY = toLocation[1].toFloat() + toView.height / 2 - 100
+            
             val moveX = ObjectAnimator.ofFloat(binding.viewAttackEffect, "x", 
-                fromLocation[0].toFloat(), toLocation[0].toFloat())
+                binding.viewAttackEffect.x, targetX)
             val moveY = ObjectAnimator.ofFloat(binding.viewAttackEffect, "y", 
-                fromLocation[1].toFloat(), toLocation[1].toFloat())
-            val scale = ObjectAnimator.ofFloat(binding.viewAttackEffect, "scaleX", 0.5f, 1.5f)
-            val scaleY = ObjectAnimator.ofFloat(binding.viewAttackEffect, "scaleY", 0.5f, 1.5f)
+                binding.viewAttackEffect.y, targetY)
+            val scale = ObjectAnimator.ofFloat(binding.viewAttackEffect, "scaleX", 2f, 3f, 2f)
+            val scaleY = ObjectAnimator.ofFloat(binding.viewAttackEffect, "scaleY", 2f, 3f, 2f)
+            val rotate = ObjectAnimator.ofFloat(binding.viewAttackEffect, "rotation", 0f, 360f)
             
             val attackAnim = AnimatorSet().apply {
-                playTogether(moveX, moveY, scale, scaleY)
-                duration = 500
+                playTogether(moveX, moveY, scale, scaleY, rotate)
+                duration = 800
             }
             
             attackAnim.start()
             attackAnim.doOnEnd {
-                // 着弾時にダメージ数値を表示
+                // 着弾時にダメージ数値を表示＆振動エフェクト
+                animateDamage(toView)
                 showFloatingDamage(toView, damage, false)
+                binding.viewAttackEffect.visibility = View.GONE
+                binding.viewAttackEffect.rotation = 0f
+            }
+        }
+    }
+    
+    /**
+     * 防御エフェクトを表示（プレイヤーの画面半分に）
+     * @param player 防御するプレイヤー
+     */
+    fun showDefenseEffect(player: Player) {
+        lifecycleScope.launch {
+            val targetView = if (player == Player.P1) binding.layoutP1Status else binding.layoutP2Status
+            
+            // シールドのような青い光
+            binding.viewAttackEffect.visibility = View.VISIBLE
+            binding.viewAttackEffect.setBackgroundColor(Color.parseColor("#2196F3"))
+            
+            val location = IntArray(2)
+            targetView.getLocationOnScreen(location)
+            binding.viewAttackEffect.x = location[0].toFloat()
+            binding.viewAttackEffect.y = location[1].toFloat()
+            binding.viewAttackEffect.alpha = 0f
+            binding.viewAttackEffect.scaleX = 3f
+            binding.viewAttackEffect.scaleY = 3f
+            
+            // パルスアニメーション
+            val fadeIn = ObjectAnimator.ofFloat(binding.viewAttackEffect, "alpha", 0f, 0.8f, 0f)
+            val pulse = AnimatorSet().apply {
+                play(fadeIn)
+                duration = 600
+            }
+            
+            pulse.start()
+            pulse.doOnEnd {
+                binding.viewAttackEffect.visibility = View.GONE
+            }
+        }
+    }
+    
+    /**
+     * 回復エフェクトを表示（プレイヤーの画面半分に）
+     * @param player 回復するプレイヤー
+     * @param amount 回復量
+     */
+    fun showHealEffect(player: Player, amount: Int) {
+        lifecycleScope.launch {
+            val targetView = if (player == Player.P1) binding.layoutP1Status else binding.layoutP2Status
+            
+            // 緑の光
+            binding.viewAttackEffect.visibility = View.VISIBLE
+            binding.viewAttackEffect.setBackgroundColor(Color.parseColor("#4CAF50"))
+            
+            val location = IntArray(2)
+            targetView.getLocationOnScreen(location)
+            binding.viewAttackEffect.x = location[0].toFloat()
+            binding.viewAttackEffect.y = location[1].toFloat()
+            binding.viewAttackEffect.alpha = 0f
+            binding.viewAttackEffect.scaleX = 2f
+            binding.viewAttackEffect.scaleY = 2f
+            
+            // パルスアニメーション
+            val fadeIn = ObjectAnimator.ofFloat(binding.viewAttackEffect, "alpha", 0f, 0.7f, 0f)
+            val scaleUp = ObjectAnimator.ofFloat(binding.viewAttackEffect, "scaleX", 2f, 4f)
+            val scaleUpY = ObjectAnimator.ofFloat(binding.viewAttackEffect, "scaleY", 2f, 4f)
+            
+            val healAnim = AnimatorSet().apply {
+                playTogether(fadeIn, scaleUp, scaleUpY)
+                duration = 800
+            }
+            
+            healAnim.start()
+            healAnim.doOnEnd {
+                showFloatingDamage(targetView, amount, true)
+                binding.viewAttackEffect.visibility = View.GONE
+            }
+        }
+    }
+    
+    /**
+     * カウンターエフェクトを表示
+     * @param player カウンターを構えるプレイヤー
+     */
+    fun showCounterEffect(player: Player) {
+        lifecycleScope.launch {
+            val targetView = if (player == Player.P1) binding.layoutP1Status else binding.layoutP2Status
+            
+            // オレンジの閃光
+            binding.viewAttackEffect.visibility = View.VISIBLE
+            binding.viewAttackEffect.setBackgroundColor(Color.parseColor("#FF9800"))
+            
+            val location = IntArray(2)
+            targetView.getLocationOnScreen(location)
+            binding.viewAttackEffect.x = location[0].toFloat()
+            binding.viewAttackEffect.y = location[1].toFloat()
+            binding.viewAttackEffect.alpha = 0f
+            binding.viewAttackEffect.scaleX = 2.5f
+            binding.viewAttackEffect.scaleY = 2.5f
+            
+            // 素早い点滅
+            val flash1 = ObjectAnimator.ofFloat(binding.viewAttackEffect, "alpha", 0f, 1f, 0f)
+            flash1.duration = 200
+            val flash2 = ObjectAnimator.ofFloat(binding.viewAttackEffect, "alpha", 0f, 1f, 0f)
+            flash2.duration = 200
+            
+            val counterAnim = AnimatorSet().apply {
+                playSequentially(flash1, flash2)
+            }
+            
+            counterAnim.start()
+            counterAnim.doOnEnd {
                 binding.viewAttackEffect.visibility = View.GONE
             }
         }
