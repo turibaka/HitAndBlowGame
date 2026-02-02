@@ -123,10 +123,12 @@ class GameActivity : AppCompatActivity() {
             viewModel.phase.collect { phase ->
                 updateInputDisplay()
                 binding.textInstruction.text = when (phase) {
-                    GamePhase.CARD_SELECT_P1 -> "P1: カード選択"
-                    GamePhase.CARD_SELECT_P2 -> "P2: カード選択"
                     GamePhase.SETTING_P1 -> "P1: 数字セット"
+                    GamePhase.CARD_SELECT_P1 -> "P1: バフカード選択"
+                    GamePhase.HAND_CONFIRM_P1 -> "P1: 手札確認（OKを押してください）"
                     GamePhase.SETTING_P2 -> "P2: 数字セット"
+                    GamePhase.CARD_SELECT_P2 -> "P2: バフカード選択"
+                    GamePhase.HAND_CONFIRM_P2 -> "P2: 手札確認（OKを押してください）"
                     GamePhase.PLAYING -> if (isCardMode) "P1: 数字を入力" else "P1: 推測"
                     GamePhase.CARD_USE_P1 -> "P1: 手札カードを使用できます"
                     GamePhase.WAITING_P2_INPUT -> if (isCardMode) "P2: 数字を入力" else "P2: 推測"
@@ -141,6 +143,11 @@ class GameActivity : AppCompatActivity() {
                     GamePhase.PLAYING, GamePhase.WAITING_P2_INPUT
                 )
                 binding.layoutInput.visibility = if (showInput) View.VISIBLE else View.GONE
+                
+                // 手札確認フェーズの処理
+                if (isCardMode && (phase == GamePhase.HAND_CONFIRM_P1 || phase == GamePhase.HAND_CONFIRM_P2)) {
+                    showHandConfirmDialog(phase)
+                }
                 
                 // 手札カード使用フェーズの処理
                 if (isCardMode && (phase == GamePhase.CARD_USE_P1 || phase == GamePhase.CARD_USE_P2)) {
@@ -321,6 +328,29 @@ class GameActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+    
+    // 手札確認ダイアログを表示
+    private fun showHandConfirmDialog(phase: GamePhase) {
+        val player = if (phase == GamePhase.HAND_CONFIRM_P1) Player.P1 else Player.P2
+        val playerName = if (player == Player.P1) "P1" else "P2"
+        val handCards = if (player == Player.P1) 
+            viewModel.p1HandCards.value else viewModel.p2HandCards.value
+        
+        val cardList = handCards.mapIndexed { index, card ->
+            "${index + 1}. 【${card.title}】 - ${card.description}"
+        }.joinToString("\n")
+        
+        val message = "このラウンドで使える手札カード（3枚）:\n\n$cardList\n\n※ターンごとに1枚使用できます\n※相手には見えません"
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("$playerName の手札カード配布")
+            .setMessage(message)
+            .setPositiveButton("OK") { _, _ ->
+                viewModel.confirmHandCards()
+            }
+            .setCancelable(false)
+            .show()
     }
     
     // 手札カード使用ダイアログを表示

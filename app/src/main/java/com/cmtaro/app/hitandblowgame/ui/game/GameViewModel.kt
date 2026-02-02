@@ -11,11 +11,12 @@ import kotlinx.coroutines.launch
 
 enum class GamePhase { 
     SETTING_P1, SETTING_P2, 
+    CARD_SELECT_P1, CARD_SELECT_P2,  // ラウンド開始時のバフカード選択
+    HAND_CONFIRM_P1, HAND_CONFIRM_P2,  // 手札確認フェーズ
     PLAYING,
     CARD_USE_P1, CARD_USE_P2,  // 手札カード使用フェーズ
     WAITING_P2_INPUT,  // P1入力完了、P2待ち
     REPLAYING,         // リプレイ中
-    CARD_SELECT_P1, CARD_SELECT_P2, 
     FINISHED 
 }
 enum class Player { P1, P2 }
@@ -174,29 +175,18 @@ class GameViewModel : ViewModel() {
     }
 
     private fun startNewRound() {
-        // ラウンド開始時に両プレイヤーにカード選択の機会を与える
-        _phase.value = GamePhase.CARD_SELECT_P1
-        prepareRoundStartCards()
-        updateStatusEffects() // ステータスを更新
+        // ラウンド開始時：まず数字設定から
+        _phase.value = GamePhase.SETTING_P1
         addBattleLog("🎮 ラウンド${_currentRound.value} 開始！")
         
-        // ラウンド開始時に手札用カード（補助系）を3枚ずつ配布
-        distributeHandCards()
-    }
-    
-    // ラウンド開始時に手札カードを配布
-    private fun distributeHandCards() {
-        val supportCards = CardType.values().filter { it.category == CardCategory.SUPPORT }
+        // 前ラウンドの手札を破棄
+        if (_p1HandCards.value.isNotEmpty() || _p2HandCards.value.isNotEmpty()) {
+            addBattleLog("🗑️ 前ラウンドの手札を破棄")
+        }
         
-        // P1に3枚配布
-        val p1NewCards = supportCards.shuffled().take(3)
-        _p1HandCards.value = _p1HandCards.value + p1NewCards
-        addBattleLog("🎴 P1 が手札カードを3枚獲得")
-        
-        // P2に3枚配布
-        val p2NewCards = supportCards.shuffled().take(3)
-        _p2HandCards.value = _p2HandCards.value + p2NewCards
-        addBattleLog("🎴 P2 が手札カードを3枚獲得")
+        // 手札を初期化（各ラウンド新しい手札）
+        _p1HandCards.value = emptyList()
+        _p2HandCards.value = emptyList()
     }
     
     // バトルログに追加
@@ -214,10 +204,13 @@ class GameViewModel : ViewModel() {
         when (_phase.value) {
             GamePhase.SETTING_P1 -> {
                 p1Answer = input
-                _phase.value = GamePhase.SETTING_P2
+                // P1の数字設定後、カード選択へ
+                _phase.value = GamePhase.CARD_SELECT_P1
+                prepareRoundStartCards()
             }
             GamePhase.SETTING_P2 -> {
                 p2Answer = input
+                // P2の数字設定後、ゲーム開始（P1のターン）
                 _phase.value = GamePhase.PLAYING
                 _currentPlayer.value = Player.P1
             }
@@ -226,11 +219,6 @@ class GameViewModel : ViewModel() {
                 p1CurrentInput = input
                 _phase.value = GamePhase.CARD_USE_P1
                 _currentPlayer.value = Player.P1
-            }
-            GamePhase.CARD_USE_P2 -> {
-                // P2のカード使用完了後、P2の数字入力へ
-                _phase.value = GamePhase.WAITING_P2_INPUT
-                _currentPlayer.value = Player.P2
             }
             GamePhase.WAITING_P2_INPUT -> {
                 // P2の入力後、手札カード使用フェーズへ
@@ -353,24 +341,22 @@ class GameViewModel : ViewModel() {
             // ダメージ計算
             calculateCardModeDamage(input, result.hit, result.blow, player)
 
-            // 3ヒット（正解）した場合の処理
-            if (result.hit == digitCount) {
-                if (_winner.value == null) {
-                    // ラウンド終了：次のラウンドへ
-                    _currentRound.value += 1
-                    addBattleLog("🎯 ${player.name} が正解！ラウンド${_currentRound.value - 1} 終了")
-                    // 決着がついていなければ新ラウンド開始
-                    viewModelScope.launch {
-                        delay(1500)
-                        startNewRound()
-                    }
-                    return
-                }
-            }
-
-            // 決着チェック
+            // 決着チェック（HP 0以下）
             if (_winner.value != null) {
                 _phase.value = GamePhase.FINISHED
+                return
+            }
+            
+            // 3ヒット（正解）した場合：ラウンド終了、次のラウンドへ
+            if (result.hit == digitCount) {
+                _currentRound.value += 1
+                addBattleLog("🎯 ${player.name} が正解！ラウンド${_currentRound.value - 1} 終了")
+                // 次のラウンド開始
+                viewModelScope.launch {
+                    delay(1500)
+                    startNewRound()
+                }
+                return
             }
         } else {
             // 通常モード（digitCount分のヒットで即終了：3桁なら3hit、4桁なら4hit）
@@ -384,11 +370,6 @@ class GameViewModel : ViewModel() {
     private fun finishReplay() {
         // リプレイ完了処理
         if (_winner.value == null && _phase.value != GamePhase.FINISHED) {
-            // ターン進行チェック（6ターンごとにカード配布）
-            if (isCardMode) {
-                checkRoundProgress()
-            }
-            
             // 次のターン準備
             _phase.value = GamePhase.PLAYING
             _currentPlayer.value = Player.P1
@@ -528,31 +509,11 @@ class GameViewModel : ViewModel() {
         // ステータス効果を更新
         updateStatusEffects()
     }
-    // processGuess の最後の方、ターン交代の直前に追加
-    private fun checkRoundProgress() {
-        turnCounter++
-        _currentTurn.value = (turnCounter / 2) + 1 // 両者で1ターン
-        
-        if (turnCounter >= 6) { // 両者3回ずつ（計6回）で1ラウンド終了
-            turnCounter = 0
-            _currentTurn.value = 1
-            // 新ラウンド開始：カード選択フェーズへ
-            _phase.value = GamePhase.CARD_SELECT_P1
-            prepareRoundStartCards()
-        }
-    }
 
     // ラウンド開始時のカード配布（バフ系のみ）
     private fun prepareRoundStartCards() {
         val buffCards = CardType.values().filter { it.category == CardCategory.BUFF }
         val selectedCards = buffCards.shuffled().take(3)
-        _availableCards.value = selectedCards
-    }
-
-    // 正解時のボーナスカード配布（補助系のみ）
-    private fun prepareNextRoundCards() {
-        val supportCards = CardType.values().filter { it.category == CardCategory.SUPPORT }
-        val selectedCards = supportCards.shuffled().take(3)
         _availableCards.value = selectedCards
     }
 
@@ -567,27 +528,53 @@ class GameViewModel : ViewModel() {
             // カード選択をログに記録
             addBattleLog("🃏 $playerName が「${card.title}」を選択")
             
-            // P1が選択完了したらP2へ、P2が完了したら数字設定フェーズへ
+            // P1が選択完了したら手札配布＆確認へ、P2が完了したら手札配布＆確認へ
             when (_phase.value) {
                 GamePhase.CARD_SELECT_P1 -> {
-                    _phase.value = GamePhase.CARD_SELECT_P2
-                    prepareRoundStartCards() // P2用にカードを再生成
+                    // P1の手札を配布
+                    distributeHandCards(Player.P1)
+                    _phase.value = GamePhase.HAND_CONFIRM_P1
                 }
                 GamePhase.CARD_SELECT_P2 -> {
-                    _phase.value = GamePhase.SETTING_P1
+                    // P2の手札を配布
+                    distributeHandCards(Player.P2)
+                    _phase.value = GamePhase.HAND_CONFIRM_P2
                 }
                 else -> {}
-            }
-        } else {
-            // 補助系カード：手札に追加
-            if (player == Player.P1) {
-                _p1HandCards.value += card
-            } else {
-                _p2HandCards.value += card
             }
         }
         
         _availableCards.value = emptyList()
+    }
+    
+    // 手札カードを配布（各ラウンド3枚、1回限り）
+    private fun distributeHandCards(player: Player) {
+        val supportCards = CardType.values().filter { it.category == CardCategory.SUPPORT }
+        val newCards = supportCards.shuffled().take(3)
+        
+        if (player == Player.P1) {
+            _p1HandCards.value = newCards
+            addBattleLog("🎴 P1 が手札カードを3枚獲得")
+        } else {
+            _p2HandCards.value = newCards
+            addBattleLog("🎴 P2 が手札カードを3枚獲得")
+        }
+    }
+    
+    // 手札確認完了
+    fun confirmHandCards() {
+        when (_phase.value) {
+            GamePhase.HAND_CONFIRM_P1 -> {
+                // P1の確認完了 → P2の数字設定へ
+                _phase.value = GamePhase.SETTING_P2
+            }
+            GamePhase.HAND_CONFIRM_P2 -> {
+                // P2の確認完了 → ゲーム開始（P1のターン）
+                _phase.value = GamePhase.PLAYING
+                _currentPlayer.value = Player.P1
+            }
+            else -> {}
+        }
     }
     
     // バフカードの効果を適用
