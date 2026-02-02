@@ -27,6 +27,10 @@ class GameActivity : AppCompatActivity() {
 
     private var currentInputString = ""
     private var digitCount = 3 // Intentから受け取った値で上書きされる
+    
+    // アニメーション制御用
+    private var lastRound = 1
+    private var lastTurn = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -216,16 +220,22 @@ class GameActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 viewModel.currentRound.collect { round ->
                     binding.textRoundInfo.text = "ラウンド: $round"
-                    // ラウンド変更時にポップアップアニメーション
-                    animatePopUp(binding.textRoundInfo)
+                    // ラウンド変更時のみアニメーション（初回はスキップ）
+                    if (round != lastRound && lastRound > 0) {
+                        animatePulse(binding.textRoundInfo)
+                    }
+                    lastRound = round
                 }
             }
 
             lifecycleScope.launch {
                 viewModel.currentTurn.collect { turn ->
                     binding.textTurnInfo.text = "ターン: $turn"
-                    // ターン変更時にポップアップアニメーション
-                    animatePopUp(binding.textTurnInfo)
+                    // ターン変更時のみアニメーション（初回はスキップ）
+                    if (turn != lastTurn && lastTurn > 0) {
+                        animatePulse(binding.textTurnInfo)
+                    }
+                    lastTurn = turn
                 }
             }
 
@@ -569,5 +579,18 @@ class GameActivity : AppCompatActivity() {
 
         scaleDown.start()
         scaleDown.doOnEnd { scaleUp.start() }
+    }
+    
+    // パルスアニメーション（既存Viewの強調用）
+    private fun animatePulse(view: View) {
+        val pulse = AnimatorSet().apply {
+            playTogether(
+                ObjectAnimator.ofFloat(view, "scaleX", 1f, 1.15f, 1f),
+                ObjectAnimator.ofFloat(view, "scaleY", 1f, 1.15f, 1f)
+            )
+            duration = 300
+            interpolator = OvershootInterpolator()
+        }
+        pulse.start()
     }
 }
