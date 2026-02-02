@@ -724,3 +724,4 @@ class GameViewModel : ViewModel() {
         
         return "🎯 正解！ ダメージなし"
     }
+}
