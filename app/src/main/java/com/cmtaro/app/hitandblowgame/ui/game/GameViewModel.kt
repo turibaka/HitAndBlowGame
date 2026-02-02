@@ -255,7 +255,7 @@ class GameViewModel : ViewModel() {
             addBattleLog("   ${p2Result.hit}H / ${p2Result.blow}B")
             delay(1500)
             
-            // カードモードの場合、ダメージ計算
+            // カードモードの場合、ダメージ計算を段階的に表示
             if (isCardMode) {
                 _replayMessage.value = buildString {
                     appendLine("🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
@@ -264,15 +264,45 @@ class GameViewModel : ViewModel() {
                     appendLine("⚔️ ダメージ計算中...")
                 }
                 delay(800)
+                
+                // P1のダメージ計算を表示
+                val p1DamageInfo = calculateDamagePreview(Player.P1, p1Result.hit, p1Result.blow)
+                _replayMessage.value = buildString {
+                    appendLine("🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
+                    appendLine("🎯 P2: ${p2Result.hit}H / ${p2Result.blow}B")
+                    appendLine()
+                    appendLine("⚔️ P1 のダメージ:")
+                    appendLine(p1DamageInfo)
+                }
+                delay(1200)
+                
+                // P1の行動を処理
+                processPlayerAction(Player.P1, p1CurrentInput)
+                delay(800)
+                
+                // P2のダメージ計算を表示
+                val p2DamageInfo = calculateDamagePreview(Player.P2, p2Result.hit, p2Result.blow)
+                _replayMessage.value = buildString {
+                    appendLine("🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
+                    appendLine("🎯 P2: ${p2Result.hit}H / ${p2Result.blow}B")
+                    appendLine()
+                    appendLine("⚔️ P1: $p1DamageInfo")
+                    appendLine()
+                    appendLine("⚔️ P2 のダメージ:")
+                    appendLine(p2DamageInfo)
+                }
+                delay(1200)
+                
+                // P2の行動を処理
+                processPlayerAction(Player.P2, p2CurrentInput)
+                delay(800)
+            } else {
+                // 通常モードの処理
+                processPlayerAction(Player.P1, p1CurrentInput)
+                delay(1000)
+                processPlayerAction(Player.P2, p2CurrentInput)
+                delay(1000)
             }
-            
-            // P1の行動を処理
-            processPlayerAction(Player.P1, p1CurrentInput)
-            delay(1000)
-            
-            // P2の行動を処理
-            processPlayerAction(Player.P2, p2CurrentInput)
-            delay(1000)
             
             // リプレイ完了
             finishReplay()
@@ -478,9 +508,14 @@ class GameViewModel : ViewModel() {
 
     // カードを選んだ時の処理
     fun onCardSelected(player: Player, card: CardType) {
+        val playerName = if (player == Player.P1) "P1" else "P2"
+        
         if (card.category == CardCategory.BUFF) {
             // バフ系カード：即時効果を適用
             applyBuffCard(player, card)
+            
+            // カード選択をログに記録
+            addBattleLog("🃏 $playerName が「${card.title}」を選択")
             
             // P1が選択完了したらP2へ、P2が完了したら数字設定フェーズへ
             when (_phase.value) {
@@ -630,5 +665,62 @@ class GameViewModel : ViewModel() {
         _p1StatusEffects.value = if (p1Effects.isEmpty()) "" else p1Effects.joinToString(" | ")
         _p2StatusEffects.value = if (p2Effects.isEmpty()) "" else p2Effects.joinToString(" | ")
     }
-
-}
+    
+    // リプレイ用：ダメージの事前計算と表示テキスト生成
+    private fun calculateDamagePreview(player: Player, hit: Int, blow: Int): String {
+        val myAnswer = if (player == Player.P1) p1Answer else p2Answer
+        val playerName = if (player == Player.P1) "P1" else "P2"
+        val targetName = if (player == Player.P1) "P2" else "P1"
+        
+        // 0 Hit 0 Blow の場合：自傷ダメージ
+        if (hit == 0 && blow == 0) {
+            val isInvincible = if (player == Player.P1) p1IsInvincible else p2IsInvincible
+            if (isInvincible) {
+                return "✨ 無敵効果で自傷ダメージ無効！"
+            }
+            
+            var selfDamage = myAnswer.map { it.digitToInt() }.sum()
+            val defReduction = if (player == Player.P1) p1DefenseReduction else p2DefenseReduction
+            val defMultiplier = if (player == Player.P1) p1DefenseMultiplier else p2DefenseMultiplier
+            
+            selfDamage = ((selfDamage - defReduction) * defMultiplier).toInt().coerceAtLeast(0)
+            
+            val currentHp = if (player == Player.P1) p1Hp.value else p2Hp.value
+            val newHp = (currentHp - selfDamage).coerceIn(0, 100)
+            
+            return "💔 $playerName → 自分 -${selfDamage} HP (${currentHp} → ${newHp})"
+        }
+        
+        // 正解以外：攻撃ダメージ
+        if (hit != digitCount) {
+            val baseAttack = 10
+            val attackBonus = if (player == Player.P1) p1AttackBonus else p2AttackBonus
+            val attackMultiplier = if (player == Player.P1) p1AttackMultiplier else p2AttackMultiplier
+            val hitBonus = if (player == Player.P1) p1HitBonus else p2HitBonus
+            val blowBonus = if (player == Player.P1) p1BlowBonus else p2BlowBonus
+            
+            var bonusDamage = 0
+            if (hitBonus > 0 && hit > 0) bonusDamage += hit * hitBonus
+            if (blowBonus > 0 && blow > 0) bonusDamage += blow * blowBonus
+            
+            val attackDamage = ((baseAttack + attackBonus) * attackMultiplier).toInt()
+            val totalDamage = attackDamage + bonusDamage
+            
+            // 反撃チェック
+            val hasCounter = if (player == Player.P1) p2HasCounter else p1HasCounter
+            
+            if (hasCounter) {
+                val currentHp = if (player == Player.P1) p1Hp.value else p2Hp.value
+                val newHp = (currentHp - attackDamage).coerceIn(0, 100)
+                return "🔄 $targetName の反撃！ → $playerName -${attackDamage} HP (${currentHp} → ${newHp})"
+            } else {
+                val targetHp = if (player == Player.P1) p2Hp.value else p1Hp.value
+                val newHp = (targetHp - totalDamage).coerceIn(0, 100)
+                
+                val bonusText = if (bonusDamage > 0) " (+${bonusDamage})" else ""
+                return "⚔️ $playerName → $targetName -${totalDamage} HP${bonusText} (${targetHp} → ${newHp})"
+            }
+        }
+        
+        return "🎯 正解！ ダメージなし"
+    }
