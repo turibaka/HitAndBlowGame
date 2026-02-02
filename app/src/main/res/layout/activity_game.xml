@@ -88,6 +88,16 @@
             android:visibility="gone"
             android:text="" />
 
+        <!-- バトルログエリア -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerBattleLog"
+            android:layout_width="match_parent"
+            android:layout_height="80dp"
+            android:layout_marginTop="4dp"
+            android:background="#F5F5F5"
+            android:padding="4dp"
+            android:visibility="gone" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

@@ -18,6 +18,7 @@ class GameActivity : AppCompatActivity() {
 
     private lateinit var p1Adapter: GuessLogAdapter
     private lateinit var p2Adapter: GuessLogAdapter
+    private lateinit var battleLogAdapter: BattleLogAdapter
 
     private var currentInputString = ""
     private var digitCount = 3 // Intentから受け取った値で上書きされる
@@ -39,10 +40,12 @@ class GameActivity : AppCompatActivity() {
             binding.layoutHp.visibility = View.VISIBLE
             binding.layoutProgressInfo.visibility = View.VISIBLE
             binding.textDamageInfo.visibility = View.VISIBLE
+            binding.recyclerBattleLog.visibility = View.VISIBLE
         } else {
             binding.layoutHp.visibility = View.GONE
             binding.layoutProgressInfo.visibility = View.GONE
             binding.textDamageInfo.visibility = View.GONE
+            binding.recyclerBattleLog.visibility = View.GONE
         }
 
         setupRecyclerViews()
@@ -53,6 +56,8 @@ class GameActivity : AppCompatActivity() {
     private fun setupRecyclerViews() {
         p1Adapter = GuessLogAdapter()
         p2Adapter = GuessLogAdapter()
+        battleLogAdapter = BattleLogAdapter()
+        
         binding.recyclerP1Logs.apply {
             layoutManager = LinearLayoutManager(this@GameActivity)
             adapter = p1Adapter
@@ -60,6 +65,10 @@ class GameActivity : AppCompatActivity() {
         binding.recyclerP2Logs.apply {
             layoutManager = LinearLayoutManager(this@GameActivity)
             adapter = p2Adapter
+        }
+        binding.recyclerBattleLog.apply {
+            layoutManager = LinearLayoutManager(this@GameActivity)
+            adapter = battleLogAdapter
         }
     }
 
@@ -201,6 +210,17 @@ class GameActivity : AppCompatActivity() {
                 viewModel.p2StatusEffects.collect { status ->
                     binding.textP2Status.text = status
                     binding.textP2Status.visibility = if (status.isEmpty()) View.GONE else View.VISIBLE
+                }
+            }
+            
+            // バトルログ監視
+            lifecycleScope.launch {
+                viewModel.battleLog.collect { logs ->
+                    battleLogAdapter.submitList(logs)
+                    // 最新ログを表示するため、スクロール
+                    if (logs.isNotEmpty()) {
+                        binding.recyclerBattleLog.smoothScrollToPosition(logs.size - 1)
+                    }
                 }
             }
             

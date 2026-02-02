@@ -1,10 +1,13 @@
 package com.cmtaro.app.hitandblowgame.ui.game
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.cmtaro.app.hitandblowgame.domain.model.Guess
 import com.cmtaro.app.hitandblowgame.domain.rule.HitBlowCalculator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 enum class GamePhase { 
     SETTING_P1, SETTING_P2, 
@@ -137,6 +140,10 @@ class GameViewModel : ViewModel() {
     private val _p2StatusEffects = MutableStateFlow("")
     val p2StatusEffects = _p2StatusEffects.asStateFlow()
     
+    // バトルログ（アニメーション付き履歴表示用）
+    private val _battleLog = MutableStateFlow<List<String>>(emptyList())
+    val battleLog = _battleLog.asStateFlow()
+    
     // リプレイシステム用
     private val _replayMessage = MutableStateFlow("")
     val replayMessage = _replayMessage.asStateFlow()
@@ -166,6 +173,16 @@ class GameViewModel : ViewModel() {
         _phase.value = GamePhase.CARD_SELECT_P1
         prepareRoundStartCards()
         updateStatusEffects() // ステータスを更新
+        addBattleLog("🎮 ラウンド${_currentRound.value} 開始！")
+    }
+    
+    // バトルログに追加
+    private fun addBattleLog(message: String) {
+        _battleLog.value = _battleLog.value + message
+        // 最新10件のみ保持
+        if (_battleLog.value.size > 10) {
+            _battleLog.value = _battleLog.value.takeLast(10)
+        }
     }
 
     fun onInputSubmitted(input: String) {
@@ -196,38 +213,70 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    // リプレイシステム：両プレイヤーの行動を順番に表示
+    // リプレイシステム：両プレイヤーの行動を順番にアニメーション表示
     private fun startReplay() {
-        _phase.value = GamePhase.REPLAYING
-        _showReplayOverlay.value = true
-        
-        // リプレイメッセージを構築
-        val p1Result = calculator.judge(p2Answer, p1CurrentInput)
-        val p2Result = calculator.judge(p1Answer, p2CurrentInput)
-        
-        val message = buildString {
-            appendLine("🎯 P1の推測: $p1CurrentInput")
-            appendLine("結果: ${p1Result.hit} Hit / ${p1Result.blow} Blow")
-            appendLine()
-            appendLine("🎯 P2の推測: $p2CurrentInput")
-            appendLine("結果: ${p2Result.hit} Hit / ${p2Result.blow} Blow")
+        viewModelScope.launch {
+            _phase.value = GamePhase.REPLAYING
+            _showReplayOverlay.value = true
             
-            if (isCardMode) {
-                appendLine()
-                appendLine("⚔️ ダメージ計算中...")
+            // P1の結果判定
+            val p1Result = calculator.judge(p2Answer, p1CurrentInput)
+            val p2Result = calculator.judge(p1Answer, p2CurrentInput)
+            
+            // ステップ1: P1の推測表示
+            _replayMessage.value = "🎯 P1 の推測: $p1CurrentInput"
+            addBattleLog("🎯 P1 → $p1CurrentInput")
+            delay(1200)
+            
+            // ステップ2: P1の結果表示
+            _replayMessage.value = buildString {
+                appendLine("🎯 P1 の推測: $p1CurrentInput")
+                appendLine("結果: ${p1Result.hit} Hit / ${p1Result.blow} Blow")
             }
+            addBattleLog("   ${p1Result.hit}H / ${p1Result.blow}B")
+            delay(1500)
+            
+            // ステップ3: P2の推測表示
+            _replayMessage.value = buildString {
+                appendLine("🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
+                appendLine()
+                appendLine("🎯 P2 の推測: $p2CurrentInput")
+            }
+            addBattleLog("🎯 P2 → $p2CurrentInput")
+            delay(1200)
+            
+            // ステップ4: P2の結果表示
+            _replayMessage.value = buildString {
+                appendLine("🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
+                appendLine()
+                appendLine("🎯 P2 の推測: $p2CurrentInput")
+                appendLine("結果: ${p2Result.hit} Hit / ${p2Result.blow} Blow")
+            }
+            addBattleLog("   ${p2Result.hit}H / ${p2Result.blow}B")
+            delay(1500)
+            
+            // カードモードの場合、ダメージ計算
+            if (isCardMode) {
+                _replayMessage.value = buildString {
+                    appendLine("🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
+                    appendLine("🎯 P2: ${p2Result.hit}H / ${p2Result.blow}B")
+                    appendLine()
+                    appendLine("⚔️ ダメージ計算中...")
+                }
+                delay(800)
+            }
+            
+            // P1の行動を処理
+            processPlayerAction(Player.P1, p1CurrentInput)
+            delay(1000)
+            
+            // P2の行動を処理
+            processPlayerAction(Player.P2, p2CurrentInput)
+            delay(1000)
+            
+            // リプレイ完了
+            finishReplay()
         }
-        
-        _replayMessage.value = message
-        
-        // P1の行動を処理
-        processPlayerAction(Player.P1, p1CurrentInput)
-        
-        // P2の行動を処理
-        processPlayerAction(Player.P2, p2CurrentInput)
-        
-        // リプレイ完了後、次のターンへ
-        finishReplay()
     }
     
     private fun processPlayerAction(player: Player, input: String) {
@@ -327,12 +376,15 @@ class GameViewModel : ViewModel() {
                 if (current == Player.P1) {
                     _p1Hp.value = (p1Hp.value - selfDamage).coerceIn(0, 100)
                     damageLog = "P1が自傷ダメージ -$selfDamage"
+                    addBattleLog("💔 P1 自傷 -$selfDamage HP (残り: ${_p1Hp.value})")
                 } else {
                     _p2Hp.value = (p2Hp.value - selfDamage).coerceIn(0, 100)
                     damageLog = "P2が自傷ダメージ -$selfDamage"
+                    addBattleLog("💔 P2 自傷 -$selfDamage HP (残り: ${_p2Hp.value})")
                 }
             } else {
                 damageLog = "${current.name}は無敵状態で自傷を無効化！"
+                addBattleLog("✨ ${current.name} 無敵発動！")
             }
             // 効果を使ったらリセット
             if (current == Player.P1) p1IsInvincible = false else p2IsInvincible = false
@@ -355,10 +407,12 @@ class GameViewModel : ViewModel() {
                 if (p2HasCounter) {
                     _p1Hp.value = (p1Hp.value - attackDamage).coerceIn(0, 100)
                     damageLog = "P2の反撃！P1に${attackDamage}ダメージ${multiplierText}${bonusText}"
+                    addBattleLog("🔄 P2 反撃！ → P1 -${attackDamage} HP (残り: ${_p1Hp.value})")
                     p2HasCounter = false
                 } else {
                     _p2Hp.value = (p2Hp.value - attackDamage - bonusDamage).coerceIn(0, 100)
                     damageLog = "P1がP2に攻撃ダメージ -${attackDamage + bonusDamage}${multiplierText}${bonusText}"
+                    addBattleLog("⚔️ P1 → P2 -${attackDamage + bonusDamage} HP (残り: ${_p2Hp.value})")
                 }
             } else {
                 attackDamage = ((baseAttack + p2AttackBonus) * p2AttackMultiplier).toInt()
@@ -371,10 +425,12 @@ class GameViewModel : ViewModel() {
                 if (p1HasCounter) {
                     _p2Hp.value = (p2Hp.value - attackDamage).coerceIn(0, 100)
                     damageLog = "P1の反撃！P2に${attackDamage}ダメージ${multiplierText}${bonusText}"
+                    addBattleLog("🔄 P1 反撃！ → P2 -${attackDamage} HP (残り: ${_p2Hp.value})")
                     p1HasCounter = false
                 } else {
                     _p1Hp.value = (p1Hp.value - attackDamage - bonusDamage).coerceIn(0, 100)
                     damageLog = "P2がP1に攻撃ダメージ -${attackDamage + bonusDamage}${multiplierText}${bonusText}"
+                    addBattleLog("⚔️ P2 → P1 -${attackDamage + bonusDamage} HP (残り: ${_p1Hp.value})")
                 }
             }
         }
@@ -451,36 +507,58 @@ class GameViewModel : ViewModel() {
     
     // バフカードの効果を適用
     private fun applyBuffCard(player: Player, card: CardType) {
+        val playerName = if (player == Player.P1) "P1" else "P2"
         when (card) {
             CardType.ATTACK_SMALL -> {
                 if (player == Player.P1) p1AttackBonus = 5 else p2AttackBonus = 5
+                addBattleLog("🃏 $playerName カード使用: ${card.title}")
             }
             CardType.ATTACK_MEDIUM -> {
                 if (player == Player.P1) p1AttackBonus = 10 else p2AttackBonus = 10
+                addBattleLog("🃏 $playerName カード使用: ${card.title}")
             }
             CardType.ATTACK_LARGE -> {
                 if (player == Player.P1) p1AttackMultiplier = 2.0 else p2AttackMultiplier = 2.0
+                addBattleLog("🃏 $playerName カード使用: ${card.title}")
             }
             CardType.DEFENSE_SMALL -> {
                 if (player == Player.P1) p1DefenseReduction = 5 else p2DefenseReduction = 5
+                addBattleLog("🃏 $playerName カード使用: ${card.title}")
             }
             CardType.DEFENSE_MEDIUM -> {
                 if (player == Player.P1) p1DefenseMultiplier = 0.5 else p2DefenseMultiplier = 0.5
+                addBattleLog("🃏 $playerName カード使用: ${card.title}")
             }
             CardType.DEFENSE_LARGE -> {
                 if (player == Player.P1) p1IsInvincible = true else p2IsInvincible = true
+                addBattleLog("🃏 $playerName カード使用: ${card.title}")
             }
             CardType.HEAL_SMALL -> {
-                if (player == Player.P1) _p1Hp.value = (p1Hp.value + 10).coerceIn(0, 100)
-                else _p2Hp.value = (p2Hp.value + 10).coerceIn(0, 100)
+                if (player == Player.P1) {
+                    _p1Hp.value = (p1Hp.value + 10).coerceIn(0, 100)
+                    addBattleLog("💚 $playerName HP回復 +10 (残り: ${_p1Hp.value})")
+                } else {
+                    _p2Hp.value = (p2Hp.value + 10).coerceIn(0, 100)
+                    addBattleLog("💚 $playerName HP回復 +10 (残り: ${_p2Hp.value})")
+                }
             }
             CardType.HEAL_MEDIUM -> {
-                if (player == Player.P1) _p1Hp.value = (p1Hp.value + 20).coerceIn(0, 100)
-                else _p2Hp.value = (p2Hp.value + 20).coerceIn(0, 100)
+                if (player == Player.P1) {
+                    _p1Hp.value = (p1Hp.value + 20).coerceIn(0, 100)
+                    addBattleLog("💚 $playerName HP回復 +20 (残り: ${_p1Hp.value})")
+                } else {
+                    _p2Hp.value = (p2Hp.value + 20).coerceIn(0, 100)
+                    addBattleLog("💚 $playerName HP回復 +20 (残り: ${_p2Hp.value})")
+                }
             }
             CardType.HEAL_LARGE -> {
-                if (player == Player.P1) _p1Hp.value = (p1Hp.value + 30).coerceIn(0, 100)
-                else _p2Hp.value = (p2Hp.value + 30).coerceIn(0, 100)
+                if (player == Player.P1) {
+                    _p1Hp.value = (p1Hp.value + 30).coerceIn(0, 100)
+                    addBattleLog("💚 $playerName HP回復 +30 (残り: ${_p1Hp.value})")
+                } else {
+                    _p2Hp.value = (p2Hp.value + 30).coerceIn(0, 100)
+                    addBattleLog("💚 $playerName HP回復 +30 (残り: ${_p2Hp.value})")
+                }
             }
             else -> {} // 補助系カードはここでは処理しない
         }
