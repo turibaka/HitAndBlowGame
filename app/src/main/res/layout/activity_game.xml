@@ -257,6 +257,40 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- リプレイオーバーレイ -->
+    <LinearLayout
+        android:id="@+id/layoutReplayOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="#E6000000"
+        android:gravity="center"
+        android:padding="32dp"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:id="@+id/textReplayTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📊 ターン結果"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="32dp" />
+
+        <TextView
+            android:id="@+id/textReplayMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.5"
+            android:text="" />
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/layoutCardSelection"
         android:layout_width="match_parent"

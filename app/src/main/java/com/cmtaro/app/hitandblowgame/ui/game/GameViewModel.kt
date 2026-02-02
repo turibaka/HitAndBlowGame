@@ -6,7 +6,14 @@ import com.cmtaro.app.hitandblowgame.domain.rule.HitBlowCalculator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class GamePhase { SETTING_P1, SETTING_P2, PLAYING, CARD_SELECT_P1, CARD_SELECT_P2, FINISHED }
+enum class GamePhase { 
+    SETTING_P1, SETTING_P2, 
+    PLAYING,
+    WAITING_P2_INPUT,  // P1入力完了、P2待ち
+    REPLAYING,         // リプレイ中
+    CARD_SELECT_P1, CARD_SELECT_P2, 
+    FINISHED 
+}
 enum class Player { P1, P2 }
 
 // カードの種類を大幅に拡張
@@ -69,6 +76,10 @@ class GameViewModel : ViewModel() {
 
     private var p1Answer: String = ""
     private var p2Answer: String = ""
+    
+    // 同時ターン制：各プレイヤーの入力を一時保存
+    private var p1CurrentInput: String = ""
+    private var p2CurrentInput: String = ""
 
     private val _currentRound = MutableStateFlow(1)
     val currentRound = _currentRound.asStateFlow()
@@ -126,6 +137,13 @@ class GameViewModel : ViewModel() {
     private val _p2StatusEffects = MutableStateFlow("")
     val p2StatusEffects = _p2StatusEffects.asStateFlow()
     
+    // リプレイシステム用
+    private val _replayMessage = MutableStateFlow("")
+    val replayMessage = _replayMessage.asStateFlow()
+    
+    private val _showReplayOverlay = MutableStateFlow(false)
+    val showReplayOverlay = _showReplayOverlay.asStateFlow()
+    
     private val _showCardSelectDialog = MutableStateFlow(false)
     val showCardSelectDialog = _showCardSelectDialog.asStateFlow()
 
@@ -163,71 +181,107 @@ class GameViewModel : ViewModel() {
                 _phase.value = GamePhase.PLAYING
                 _currentPlayer.value = Player.P1
             }
-            GamePhase.PLAYING -> processGuess(input)
+            GamePhase.PLAYING -> {
+                // P1の入力
+                p1CurrentInput = input
+                _phase.value = GamePhase.WAITING_P2_INPUT
+                _currentPlayer.value = Player.P2
+            }
+            GamePhase.WAITING_P2_INPUT -> {
+                // P2の入力完了 → リプレイ開始
+                p2CurrentInput = input
+                startReplay()
+            }
             else -> {}
         }
     }
 
-    // --- processGuess 関数を以下に丸ごと差し替え ---
-    private fun processGuess(input: String) {
-        val current = _currentPlayer.value
-        val target = if (current == Player.P1) p2Answer else p1Answer
+    // リプレイシステム：両プレイヤーの行動を順番に表示
+    private fun startReplay() {
+        _phase.value = GamePhase.REPLAYING
+        _showReplayOverlay.value = true
+        
+        // リプレイメッセージを構築
+        val p1Result = calculator.judge(p2Answer, p1CurrentInput)
+        val p2Result = calculator.judge(p1Answer, p2CurrentInput)
+        
+        val message = buildString {
+            appendLine("🎯 P1の推測: $p1CurrentInput")
+            appendLine("結果: ${p1Result.hit} Hit / ${p1Result.blow} Blow")
+            appendLine()
+            appendLine("🎯 P2の推測: $p2CurrentInput")
+            appendLine("結果: ${p2Result.hit} Hit / ${p2Result.blow} Blow")
+            
+            if (isCardMode) {
+                appendLine()
+                appendLine("⚔️ ダメージ計算中...")
+            }
+        }
+        
+        _replayMessage.value = message
+        
+        // P1の行動を処理
+        processPlayerAction(Player.P1, p1CurrentInput)
+        
+        // P2の行動を処理
+        processPlayerAction(Player.P2, p2CurrentInput)
+        
+        // リプレイ完了後、次のターンへ
+        finishReplay()
+    }
+    
+    private fun processPlayerAction(player: Player, input: String) {
+        val target = if (player == Player.P1) p2Answer else p1Answer
         val result = calculator.judge(target, input)
 
         // ログの記録
-        val newGuess = Guess(current.name, input, result.hit, result.blow)
-        if (current == Player.P1) _p1Logs.value += newGuess else _p2Logs.value += newGuess
+        val newGuess = Guess(player.name, input, result.hit, result.blow)
+        if (player == Player.P1) _p1Logs.value += newGuess else _p2Logs.value += newGuess
 
         // ターン数をカウント
         _totalTurns.value += 1
 
         if (isCardMode) {
-            // 1. ダメージ計算
-            calculateCardModeDamage(input, result.hit, result.blow, current)
+            // ダメージ計算
+            calculateCardModeDamage(input, result.hit, result.blow, player)
 
-            // 2. 3ヒット（正解）した場合の処理
+            // 3ヒット（正解）した場合の処理
             if (result.hit == digitCount) {
                 if (_winner.value == null) {
-                    // ラウンド進行
-                    _currentRound.value += 1
-                    _currentTurn.value = 1 // ターンリセット
-                    turnCounter = 0 // 内部カウンターもリセット
-                    
-                    // ここでバフカードを配る（ボーナスタイム）
+                    // 補助系カードを獲得できる選択肢を提供
                     prepareNextRoundCards()
-
-                    // 【重要】ターゲット（数字）をリセットするため、設定フェーズに戻す
-                    // 正解されたプレイヤー（ターゲット側）が数字を決め直す
-                    // 例：P1が当てたなら、次はP2が新しい数字を決める
-                    _phase.value = if (current == Player.P1) GamePhase.SETTING_P2 else GamePhase.SETTING_P1
-
-                    // ログも一旦クリアして、新しいラウンドをスッキリさせる
-                    _p1Logs.value = emptyList()
-                    _p2Logs.value = emptyList()
-
-                    return // フェーズが変わるのでここで処理終了
                 }
             }
 
-            // 3. 決着チェック
+            // 決着チェック
             if (_winner.value != null) {
                 _phase.value = GamePhase.FINISHED
-            } else {
-                // ターン進行チェック（6ターンごとにカード配布）
-                checkRoundProgress()
-                
-                // 交代
-                _currentPlayer.value = if (current == Player.P1) Player.P2 else Player.P1
             }
         } else {
             // 通常モード（digitCount分のヒットで即終了：3桁なら3hit、4桁なら4hit）
             if (result.hit == digitCount) {
-                _winner.value = current
+                _winner.value = player
                 _phase.value = GamePhase.FINISHED
-            } else {
-                _currentPlayer.value = if (current == Player.P1) Player.P2 else Player.P1
             }
         }
+    }
+    
+    private fun finishReplay() {
+        // リプレイ完了処理
+        if (_winner.value == null && _phase.value != GamePhase.FINISHED) {
+            // ターン進行チェック（6ターンごとにカード配布）
+            if (isCardMode) {
+                checkRoundProgress()
+            }
+            
+            // 次のターン準備
+            _phase.value = GamePhase.PLAYING
+            _currentPlayer.value = Player.P1
+            p1CurrentInput = ""
+            p2CurrentInput = ""
+        }
+        
+        _showReplayOverlay.value = false
     }
 
     // カードバトルの特殊ルール

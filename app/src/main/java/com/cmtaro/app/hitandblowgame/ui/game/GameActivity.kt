@@ -118,18 +118,36 @@ class GameActivity : AppCompatActivity() {
                     GamePhase.CARD_SELECT_P2 -> "P2: カード選択"
                     GamePhase.SETTING_P1 -> "P1: 数字セット"
                     GamePhase.SETTING_P2 -> "P2: 数字セット"
-                    GamePhase.PLAYING -> if (isCardMode) "バトル中" else "推測中"
+                    GamePhase.PLAYING -> if (isCardMode) "P1: 数字を入力" else "P1: 推測"
+                    GamePhase.WAITING_P2_INPUT -> if (isCardMode) "P2: 数字を入力" else "P2: 推測"
+                    GamePhase.REPLAYING -> "リプレイ中..."
                     GamePhase.FINISHED -> "試合終了"
                 }
                 
                 // 入力エリアの表示/非表示制御
-                val showInput = phase in listOf(GamePhase.SETTING_P1, GamePhase.SETTING_P2, GamePhase.PLAYING)
+                val showInput = phase in listOf(
+                    GamePhase.SETTING_P1, GamePhase.SETTING_P2, 
+                    GamePhase.PLAYING, GamePhase.WAITING_P2_INPUT
+                )
                 binding.layoutInput.visibility = if (showInput) View.VISIBLE else View.GONE
             }
         }
 
         // --- カードモード専用の監視 ---
         if (isCardMode) {
+            // リプレイオーバーレイの監視
+            lifecycleScope.launch {
+                viewModel.showReplayOverlay.collect { show ->
+                    binding.layoutReplayOverlay.visibility = if (show) View.VISIBLE else View.GONE
+                }
+            }
+            
+            lifecycleScope.launch {
+                viewModel.replayMessage.collect { message ->
+                    binding.textReplayMessage.text = message
+                }
+            }
+            
             // ラウンドとターンの表示
             lifecycleScope.launch {
                 viewModel.currentRound.collect { round ->
