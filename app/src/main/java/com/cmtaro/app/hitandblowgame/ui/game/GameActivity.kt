@@ -105,11 +105,17 @@ class GameActivity : AppCompatActivity() {
             viewModel.phase.collect { phase ->
                 updateInputDisplay()
                 binding.textInstruction.text = when (phase) {
-                    GamePhase.SETTING_P1 -> "P1: セット"
-                    GamePhase.SETTING_P2 -> "P2: セット"
+                    GamePhase.CARD_SELECT_P1 -> "P1: カード選択"
+                    GamePhase.CARD_SELECT_P2 -> "P2: カード選択"
+                    GamePhase.SETTING_P1 -> "P1: 数字セット"
+                    GamePhase.SETTING_P2 -> "P2: 数字セット"
                     GamePhase.PLAYING -> "バトル中"
                     GamePhase.FINISHED -> "試合終了"
                 }
+                
+                // 入力エリアの表示/非表示制御
+                val showInput = phase in listOf(GamePhase.SETTING_P1, GamePhase.SETTING_P2, GamePhase.PLAYING)
+                binding.layoutInput.visibility = if (showInput) View.VISIBLE else View.GONE
             }
         }
 
@@ -158,11 +164,24 @@ class GameActivity : AppCompatActivity() {
         lifecycleScope.launch {
             viewModel.availableCards.collect { cards ->
                 if (cards.isNotEmpty()) {
-                    val options = cards.map { it.title }.toTypedArray()
+                    val currentPhase = viewModel.phase.value
+                    val player = when (currentPhase) {
+                        GamePhase.CARD_SELECT_P1 -> Player.P1
+                        GamePhase.CARD_SELECT_P2 -> Player.P2
+                        else -> viewModel.currentPlayer.value
+                    }
+                    
+                    val title = when (currentPhase) {
+                        GamePhase.CARD_SELECT_P1, GamePhase.CARD_SELECT_P2 -> 
+                            "${if (player == Player.P1) "P1" else "P2"}: ラウンド開始カード"
+                        else -> "ボーナスカード獲得！"
+                    }
+                    
+                    val items = cards.map { "${it.title}\n${it.description}" }.toTypedArray()
                     androidx.appcompat.app.AlertDialog.Builder(this@GameActivity)
-                        .setTitle("ボーナス")
-                        .setItems(options) { _, which ->
-                            viewModel.onCardSelected(viewModel.currentPlayer.value, cards[which])
+                        .setTitle(title)
+                        .setItems(items) { _, which ->
+                            viewModel.onCardSelected(player, cards[which])
                         }
                         .setCancelable(false)
                         .show()
