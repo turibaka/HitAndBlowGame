@@ -388,13 +388,13 @@ class GameViewModel : ViewModel() {
         
         // P1の状態異常
         val p1Status = mutableListOf<String>()
-        if (_p1AttackBonus.value > 0) p1Status.add("攻撃+${_p1AttackBonus.value}")
-        if (_p1AttackMultiplier.value > 1.0) p1Status.add("攻撃×${_p1AttackMultiplier.value}")
-        if (_p1DefenseReduction.value > 0) p1Status.add("防御-${_p1DefenseReduction.value}")
-        if (_p1HasCounter.value) p1Status.add("反撃")
-        if (_p1IsInvincible.value) p1Status.add("無敵")
-        if (_p1HitBonus.value > 0) p1Status.add("Hit+${_p1HitBonus.value}")
-        if (_p1BlowBonus.value > 0) p1Status.add("Blow+${_p1BlowBonus.value}")
+        if (p1AttackBonus > 0) p1Status.add("攻撃+${p1AttackBonus}")
+        if (p1AttackMultiplier > 1.0) p1Status.add("攻撃×${p1AttackMultiplier}")
+        if (p1DefenseReduction > 0) p1Status.add("防御-${p1DefenseReduction}")
+        if (p1HasCounter) p1Status.add("反撃")
+        if (p1IsInvincible) p1Status.add("無敵")
+        if (p1HitBonus > 0) p1Status.add("Hit+${p1HitBonus}")
+        if (p1BlowBonus > 0) p1Status.add("Blow+${p1BlowBonus}")
         
         if (p1Status.isNotEmpty()) {
             parts.add("【P1】${p1Status.joinToString(", ")}")
@@ -402,13 +402,13 @@ class GameViewModel : ViewModel() {
         
         // P2の状態異常
         val p2Status = mutableListOf<String>()
-        if (_p2AttackBonus.value > 0) p2Status.add("攻撃+${_p2AttackBonus.value}")
-        if (_p2AttackMultiplier.value > 1.0) p2Status.add("攻撃×${_p2AttackMultiplier.value}")
-        if (_p2DefenseReduction.value > 0) p2Status.add("防御-${_p2DefenseReduction.value}")
-        if (_p2HasCounter.value) p2Status.add("反撃")
-        if (_p2IsInvincible.value) p2Status.add("無敵")
-        if (_p2HitBonus.value > 0) p2Status.add("Hit+${_p2HitBonus.value}")
-        if (_p2BlowBonus.value > 0) p2Status.add("Blow+${_p2BlowBonus.value}")
+        if (p2AttackBonus > 0) p2Status.add("攻撃+${p2AttackBonus}")
+        if (p2AttackMultiplier > 1.0) p2Status.add("攻撃×${p2AttackMultiplier}")
+        if (p2DefenseReduction > 0) p2Status.add("防御-${p2DefenseReduction}")
+        if (p2HasCounter) p2Status.add("反撃")
+        if (p2IsInvincible) p2Status.add("無敵")
+        if (p2HitBonus > 0) p2Status.add("Hit+${p2HitBonus}")
+        if (p2BlowBonus > 0) p2Status.add("Blow+${p2BlowBonus}")
         
         if (p2Status.isNotEmpty()) {
             parts.add("【P2】${p2Status.joinToString(", ")}")
