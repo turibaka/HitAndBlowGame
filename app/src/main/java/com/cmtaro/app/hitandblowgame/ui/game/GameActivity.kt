@@ -220,6 +220,9 @@ class GameActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 viewModel.replayEffect.collect { effect ->
                     when (effect.type) {
+                        EffectType.RESULT_DISPLAY -> {
+                            showResultDisplay(effect.player, effect.hit, effect.blow)
+                        }
                         EffectType.ATTACK -> {
                             showAttackEffect(effect.player, effect.targetPlayer!!, effect.value)
                         }
@@ -270,17 +273,6 @@ class GameActivity : AppCompatActivity() {
                 }
             }
 
-            // ダメージ情報の表示
-            lifecycleScope.launch {
-                viewModel.lastDamageInfo.collect { damageInfo ->
-                    if (damageInfo.isNotEmpty()) {
-                        binding.textDamageInfo.text = damageInfo
-                        // ダメージ情報表示時にアニメーション
-                        animatePopUp(binding.textDamageInfo)
-                    }
-                }
-            }
-
             // HP監視
             lifecycleScope.launch {
                 viewModel.p1Hp.collect { hp ->
@@ -303,46 +295,6 @@ class GameActivity : AppCompatActivity() {
                     // HPが減った場合、ダメージアニメーション
                     if (hp < prevHp) {
                         animateDamage(binding.layoutP2Status)
-                    }
-                }
-            }
-
-            // ステータス効果監視
-            lifecycleScope.launch {
-                viewModel.p1StatusEffects.collect { status ->
-                    binding.textP1Status.text = status
-                    if (status.isEmpty()) {
-                        if (binding.textP1Status.visibility == View.VISIBLE) {
-                            animateFadeOut(binding.textP1Status, onEnd = {
-                                binding.textP1Status.visibility = View.GONE
-                            })
-                        }
-                    } else {
-                        if (binding.textP1Status.visibility != View.VISIBLE) {
-                            binding.textP1Status.visibility = View.VISIBLE
-                            animateFadeIn(binding.textP1Status)
-                        } else {
-                            animatePopUp(binding.textP1Status)
-                        }
-                    }
-                }
-            }
-            lifecycleScope.launch {
-                viewModel.p2StatusEffects.collect { status ->
-                    binding.textP2Status.text = status
-                    if (status.isEmpty()) {
-                        if (binding.textP2Status.visibility == View.VISIBLE) {
-                            animateFadeOut(binding.textP2Status, onEnd = {
-                                binding.textP2Status.visibility = View.GONE
-                            })
-                        }
-                    } else {
-                        if (binding.textP2Status.visibility != View.VISIBLE) {
-                            binding.textP2Status.visibility = View.VISIBLE
-                            animateFadeIn(binding.textP2Status)
-                        } else {
-                            animatePopUp(binding.textP2Status)
-                        }
                     }
                 }
             }
@@ -646,6 +598,55 @@ class GameActivity : AppCompatActivity() {
     }
 
     // === リプレイ演出専用のアニメーション ===
+
+    /**
+     * Hit/Blow結果を表示
+     * @param player 結果を表示するプレイヤー
+     * @param hit Hit数
+     * @param blow Blow数
+     */
+    fun showResultDisplay(player: Player, hit: Int, blow: Int) {
+        lifecycleScope.launch {
+            val targetView = if (player == Player.P1) binding.layoutP1Status else binding.layoutP2Status
+            
+            val location = IntArray(2)
+            targetView.getLocationOnScreen(location)
+            
+            // 結果テキストを表示
+            binding.textFloatingDamage.text = "$hit Hit / $blow Blow"
+            binding.textFloatingDamage.setTextColor(Color.parseColor("#FFD700"))
+            binding.textFloatingDamage.textSize = 28f
+            binding.textFloatingDamage.x = location[0].toFloat() + (targetView.width / 2) - 150
+            binding.textFloatingDamage.y = location[1].toFloat() + targetView.height / 2 - 50
+            binding.textFloatingDamage.visibility = View.VISIBLE
+            binding.textFloatingDamage.alpha = 0f
+            binding.textFloatingDamage.scaleX = 0.5f
+            binding.textFloatingDamage.scaleY = 0.5f
+            
+            // フェードイン＆拡大
+            val fadeIn = ObjectAnimator.ofFloat(binding.textFloatingDamage, "alpha", 0f, 1f)
+            val scaleUpX = ObjectAnimator.ofFloat(binding.textFloatingDamage, "scaleX", 0.5f, 1.2f, 1f)
+            val scaleUpY = ObjectAnimator.ofFloat(binding.textFloatingDamage, "scaleY", 0.5f, 1.2f, 1f)
+            
+            val showAnim = AnimatorSet().apply {
+                playTogether(fadeIn, scaleUpX, scaleUpY)
+                duration = 400
+            }
+            
+            showAnim.start()
+            
+            // 0.8秒後にフェードアウト
+            binding.textFloatingDamage.postDelayed({
+                val fadeOut = ObjectAnimator.ofFloat(binding.textFloatingDamage, "alpha", 1f, 0f)
+                fadeOut.duration = 300
+                fadeOut.start()
+                fadeOut.doOnEnd {
+                    binding.textFloatingDamage.visibility = View.GONE
+                    binding.textFloatingDamage.textSize = 48f // 元に戻す
+                }
+            }, 800)
+        }
+    }
 
     /**
      * 攻撃エフェクトを表示（画面全体を使った演出）

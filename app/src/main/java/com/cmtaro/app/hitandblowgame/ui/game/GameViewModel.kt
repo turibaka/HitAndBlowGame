@@ -55,11 +55,14 @@ data class ReplayEffect(
     val player: Player,
     val targetPlayer: Player? = null,
     val value: Int = 0,
+    val hit: Int = 0,      // Hit数
+    val blow: Int = 0,     // Blow数
     val timestamp: Long = System.currentTimeMillis()
 )
 
 enum class EffectType {
     NONE,
+    RESULT_DISPLAY,  // Hit/Blow結果表示
     ATTACK,      // 攻撃演出（playerからtargetPlayerへ）
     DEFENSE,     // 防御演出（playerの領域に）
     HEAL,        // 回復演出（playerの領域に）
@@ -263,24 +266,39 @@ class GameViewModel : ViewModel() {
 
             addBattleLog("🎯 P1 → $p1CurrentInput")
             addBattleLog("   ${p1Result.hit}H / ${p1Result.blow}B")
-            delay(300)
-            
             addBattleLog("🎯 P2 → $p2CurrentInput")
             addBattleLog("   ${p2Result.hit}H / ${p2Result.blow}B")
-            delay(500)
 
             // カードモードの場合、エフェクト付きでダメージ計算
             if (isCardMode) {
-                // P1のカード使用演出
+                // ステップ1: 初手スキル（ラウンド開始時のバフカード）発動演出
+                if (p1NextBuff != null) {
+                    showCardEffect(Player.P1, p1NextBuff!!)
+                }
+                if (p2NextBuff != null) {
+                    showCardEffect(Player.P2, p2NextBuff!!)
+                }
+                delay(400)
+                
+                // ステップ2: 手札スキル発動演出
                 if (p1UsedCard != null) {
                     showCardEffect(Player.P1, p1UsedCard!!)
                 }
-                delay(600)
+                if (p2UsedCard != null) {
+                    showCardEffect(Player.P2, p2UsedCard!!)
+                }
+                delay(400)
                 
-                // P1の攻撃/ダメージ処理
+                // ステップ3: Hit/Blow結果表示
+                _replayEffect.value = ReplayEffect(EffectType.RESULT_DISPLAY, Player.P1, null, 0, p1Result.hit, p1Result.blow)
+                delay(1200)
+                
+                _replayEffect.value = ReplayEffect(EffectType.RESULT_DISPLAY, Player.P2, null, 0, p2Result.hit, p2Result.blow)
+                delay(1200)
+                
+                // ステップ4: P1の攻撃演出（ダメージがある場合のみ）
                 val p1Damage = calculateActualDamage(Player.P1, p1Result.hit, p1Result.blow)
                 if (p1Damage > 0) {
-                    // 攻撃エフェクト
                     _replayEffect.value = ReplayEffect(EffectType.ATTACK, Player.P1, Player.P2, p1Damage)
                     delay(1500)
                 }
@@ -288,25 +306,17 @@ class GameViewModel : ViewModel() {
                 processPlayerAction(Player.P1, p1CurrentInput)
                 delay(400)
 
-                // P2のカード使用演出
-                if (p2UsedCard != null) {
-                    showCardEffect(Player.P2, p2UsedCard!!)
-                }
-                delay(600)
-                
-                // P2の攻撃/ダメージ処理
+                // ステップ5: P2の攻撃演出（ダメージがある場合のみ）
                 val p2Damage = calculateActualDamage(Player.P2, p2Result.hit, p2Result.blow)
                 if (p2Damage > 0) {
-                    // 攻撃エフェクト
                     _replayEffect.value = ReplayEffect(EffectType.ATTACK, Player.P2, Player.P1, p2Damage)
                     delay(1500)
                 }
 
-                // P2の行動を処理
                 processPlayerAction(Player.P2, p2CurrentInput)
                 delay(400)
             } else {
-                // 通常モードの処理
+                // 通常モードの処理（Hit/Blowのみで攻撃なし）
                 processPlayerAction(Player.P1, p1CurrentInput)
                 delay(1000)
                 processPlayerAction(Player.P2, p2CurrentInput)
