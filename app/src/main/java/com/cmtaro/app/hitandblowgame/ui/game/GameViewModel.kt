@@ -212,7 +212,7 @@ class GameViewModel : ViewModel() {
                 _currentPlayer.value = if (current == Player.P1) Player.P2 else Player.P1
             }
         } else {
-            // 通常モード（3ヒットで即終了）
+            // 通常モード（digitCount分のヒットで即終了：3桁なら3hit、4桁なら4hit）
             if (result.hit == digitCount) {
                 _winner.value = current
                 _phase.value = GamePhase.FINISHED
