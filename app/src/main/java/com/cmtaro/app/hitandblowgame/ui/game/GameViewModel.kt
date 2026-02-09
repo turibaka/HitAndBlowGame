@@ -340,8 +340,15 @@ class GameViewModel : ViewModel() {
                 delay(600)
             } else {
                 // 通常モードの処理（Hit/Blowのみで攻撃なし）
+                // P1の結果を表示
+                _replayEffect.value = ReplayEffect(EffectType.RESULT_DISPLAY, Player.P1, null, 0, p1Result.hit, p1Result.blow)
+                delay(2000)
                 processPlayerAction(Player.P1, p1CurrentInput)
                 delay(1000)
+                
+                // P2の結果を表示
+                _replayEffect.value = ReplayEffect(EffectType.RESULT_DISPLAY, Player.P2, null, 0, p2Result.hit, p2Result.blow)
+                delay(2000)
                 processPlayerAction(Player.P2, p2CurrentInput)
                 delay(1000)
             }

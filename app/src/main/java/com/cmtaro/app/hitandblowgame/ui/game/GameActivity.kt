@@ -388,10 +388,53 @@ class GameActivity : AppCompatActivity() {
         lifecycleScope.launch {
             viewModel.winner.collect { winner ->
                 winner?.let {
-                    Toast.makeText(this@GameActivity, "${it.name} の勝利！", Toast.LENGTH_LONG).show()
+                    // 試合終了後、結果を大きく表示
+                    showGameResultDialog(it)
                 }
             }
         }
+    }
+    
+    /**
+     * 試合終了時の結果ダイアログを表示
+     * @param winner 勝利したプレイヤー
+     */
+    private fun showGameResultDialog(winner: Player) {
+        val totalTurns = viewModel.totalTurns.value
+        val p1Logs = viewModel.p1Logs.value
+        val p2Logs = viewModel.p2Logs.value
+        
+        val winnerName = if (winner == Player.P1) "プレイヤー 1" else "プレイヤー 2"
+        val winnerIcon = if (winner == Player.P1) "🏆" else "🏆"
+        
+        val message = """
+            $winnerIcon $winnerName の勝利！ $winnerIcon
+            
+            【試合結果】
+            総ターン数: $totalTurns ターン
+            P1 推測回数: ${p1Logs.size} 回
+            P2 推測回数: ${p2Logs.size} 回
+            
+            おめでとうございます！
+        """.trimIndent()
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🎉 試合終了 🎉")
+            .setMessage(message)
+            .setPositiveButton("ホームに戻る") { _, _ ->
+                finish()
+            }
+            .setNegativeButton("履歴を見る") { _, _ ->
+                // 履歴画面に遷移（後で実装可能）
+                finish()
+            }
+            .setCancelable(false)
+            .create()
+            .apply {
+                show()
+                // ダイアログにアニメーションを追加
+                window?.decorView?.let { animatePopUp(it) }
+            }
     }
 
     /**
